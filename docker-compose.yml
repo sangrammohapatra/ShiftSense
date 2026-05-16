@@ -1,0 +1,129 @@
+version: "3.9"
+
+# ─── ShiftSense — docker-compose.yml ─────────────────────────────────────────
+# Starts all services: MongoDB, Redis, Express API, React client, Puppeteer scraper
+#
+# Quick start:
+#   cp .env.example server/.env
+#   docker-compose up --build
+#
+# Seed wages (run once after first start):
+#   docker-compose exec scraper node seedWages.js
+
+services:
+
+  # ── MongoDB 7 ───────────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    container_name: shiftsense-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+      - mongo_config:/data/configdb
+    environment:
+      # Set these in server/.env; leave blank for no auth in local dev
+      MONGO_INITDB_ROOT_USERNAME: ""
+      MONGO_INITDB_ROOT_PASSWORD: ""
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - shiftsense-net
+
+  # ── Redis 7 ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: shiftsense-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes  # persist queue state across restarts
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - shiftsense-net
+
+  # ── Express API server ───────────────────────────────────────────────────────
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: shiftsense-server
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./server/.env
+    environment:
+      # Override with Docker service hostnames — these take precedence over .env
+      MONGO_URI: mongodb://mongodb:27017/shiftsense
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Mount server source for live reload in development
+      # Remove this in production for security
+      - ./server/src:/app/src:ro
+    networks:
+      - shiftsense-net
+
+  # ── React / Vite client (served via Nginx) ───────────────────────────────────
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        # Vite replaces this at build time — must be set before docker build
+        VITE_API_BASE_URL: /api/v1
+    container_name: shiftsense-client
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - server
+    networks:
+      - shiftsense-net
+
+  # ── Puppeteer scraper + monthly cron ────────────────────────────────────────
+  scraper:
+    build:
+      context: ./scraper
+      dockerfile: Dockerfile
+    container_name: shiftsense-scraper
+    restart: unless-stopped
+    env_file:
+      - ./server/.env          # shares the same env as server (MONGO_URI etc.)
+    environment:
+      MONGO_URI: mongodb://mongodb:27017/shiftsense
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - shiftsense-net
+
+# ─── Named volumes ─────────────────────────────────────────────────────────────
+volumes:
+  mongo_data:
+    driver: local
+  mongo_config:
+    driver: local
+  redis_data:
+    driver: local
+
+# ─── Internal network ──────────────────────────────────────────────────────────
+networks:
+  shiftsense-net:
+    driver: bridge
