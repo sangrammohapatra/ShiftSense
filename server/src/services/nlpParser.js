@@ -1,7 +1,7 @@
 /**
- * services/nlpParser.js — Claude AI shift message parser
+ * services/nlpParser.js — Gemini AI shift message parser
  *
- * Calls the Anthropic Claude API to extract structured shift data from the
+ * Calls Google Gemini API to extract structured shift data from the
  * free-text WhatsApp messages workers send. Workers write naturally in Hindi,
  * English, or a mix ("shift 9 baje se 6 baje tak construction") and this
  * service normalises that into a structured object the rules engine can use.
@@ -13,23 +13,9 @@
  * Return shape:
  *   Success: { success: true,  data: { shift_date, start_hour, end_hour, occupation, state } }
  *   Failure: { success: false, reason: string }
- *
- * "Ambiguous" means one or more of start_hour / end_hour came back null —
- * the caller is responsible for asking a clarifying question and retrying.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
-
-// ─── Lazy client (same pattern as notifier.js) ────────────────────────────────
-let _client = null;
-const getClient = () => {
-  if (!_client) {
-    const apiKey = process.env.CLAUDE_API_KEY;
-    if (!apiKey) throw new Error("CLAUDE_API_KEY is not set.");
-    _client = new Anthropic({ apiKey });
-  }
-  return _client;
-};
+const GEMINI_MODEL = "gemini-2.5-flash";
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are a shift log parser for Indian informal workers who communicate via WhatsApp.
@@ -65,11 +51,8 @@ const todayIST = () => {
 };
 
 /**
- * Validates that the parsed JSON from Claude has the expected shape.
+ * Validates that the parsed JSON has the expected shape.
  * Returns an array of missing/invalid field names (empty = valid).
- *
- * @param {object} obj
- * @returns {string[]} Array of invalid field names
  */
 const validateParsed = (obj) => {
   const issues = [];
@@ -108,7 +91,55 @@ const validateParsed = (obj) => {
 };
 
 /**
- * Parses a raw WhatsApp shift message using Claude AI.
+ * Calls Gemini REST API (non-streaming) and returns the text response.
+ *
+ * @param {string} systemPrompt
+ * @param {string} userMessage
+ * @returns {Promise<string>} Raw text from Gemini
+ */
+const callGemini = async (systemPrompt, userMessage) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not set.");
+
+  // Use generateContent (non-streaming) — simpler to parse for JSON responses
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+
+  const body = {
+    system_instruction: {
+      parts: [{ text: systemPrompt }],
+    },
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: userMessage }],
+      },
+    ],
+    generationConfig: {
+      temperature: 0,         // deterministic — we need exact JSON
+      maxOutputTokens: 256,   // JSON response is tiny
+    },
+  };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Gemini API error ${res.status}: ${errText}`);
+  }
+
+  const data = await res.json();
+
+  // Extract text from Gemini response shape
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  return text.trim();
+};
+
+/**
+ * Parses a raw WhatsApp shift message using Gemini AI.
  *
  * @param {string} rawText          The worker's WhatsApp message
  * @param {string} workerState      The worker's registered state (2-letter code)
@@ -130,21 +161,9 @@ export const parseShiftMessage = async (
     `Worker's message: "${rawText}"`;
 
   try {
-    const response = await getClient().messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 256, // JSON response is tiny — keep token budget low
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }],
-    });
+    const rawContent = await callGemini(SYSTEM_PROMPT, userMessage);
 
-    // Extract text content from the response
-    const rawContent = response.content
-      .filter((block) => block.type === "text")
-      .map((block) => block.text)
-      .join("")
-      .trim();
-
-    // Strip markdown fences if Claude includes them despite instructions
+    // Strip markdown fences if Gemini includes them despite instructions
     const jsonString = rawContent
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
@@ -156,12 +175,12 @@ export const parseShiftMessage = async (
       parsed = JSON.parse(jsonString);
     } catch (parseErr) {
       console.error(
-        `[NLPParser] JSON parse failed. Raw Claude output: "${rawContent}"`,
+        `[NLPParser] JSON parse failed. Raw Gemini output: "${rawContent}"`,
       );
       return {
         success: false,
         reason:
-          "Claude returned non-JSON output. Please rephrase your shift message.",
+          "Could not understand your shift message. Please rephrase and try again.",
       };
     }
 
@@ -174,12 +193,12 @@ export const parseShiftMessage = async (
       };
     }
 
-    // Apply defaults: fill null state from worker profile
+    // Apply defaults from worker profile
     if (!parsed.state && workerState) parsed.state = workerState.toUpperCase();
     if (!parsed.occupation && workerOccupation)
       parsed.occupation = workerOccupation;
 
-    // Use today as fallback if Claude returned null for date
+    // Fallback date
     if (!parsed.shift_date) parsed.shift_date = today;
 
     // Detect ambiguity — hours are the critical fields
@@ -195,7 +214,7 @@ export const parseShiftMessage = async (
       data: parsed,
     };
   } catch (err) {
-    console.error(`[NLPParser] Claude API error: ${err.message}`);
+    console.error(`[NLPParser] Gemini API error: ${err.message}`);
     return {
       success: false,
       reason: "AI parsing service temporarily unavailable. Please try again.",
