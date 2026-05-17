@@ -206,12 +206,12 @@ const MSG = {
 };
 
 // ─── Phone normalisation ───────────────────────────────────────────────────────
-const normalisePhone = (raw) =>
-  raw
-    .replace(/^whatsapp:/i, "")
-    .replace(/^\+91/, "")
-    .replace(/\D/g, "")
-    .slice(-10);
+// Returns full E.164 format: +919XXXXXXXXX
+const normalisePhone = (raw) => {
+  const digits = raw.replace(/^whatsapp:/i, "").replace(/\D/g, "");
+  const last10 = digits.slice(-10);
+  return `+91${last10}`; // always return full E.164
+};
 
 // ─── Twilio signature validation ──────────────────────────────────────────────
 const validateTwilioSignature = (req, res, next) => {
@@ -310,7 +310,7 @@ const handleRegistration = async (phone, body, state) => {
     const { name, state: workerState, occupation } = data;
     try {
       await Worker.create({
-        phone_number: `+91${phone}`,
+        phone_number: phone,
         name,
         state: workerState,
         occupation,
@@ -571,7 +571,7 @@ router.post(
     console.log(`[Webhook] Inbound +91${phone}: "${rawBody}"`);
 
     try {
-      const worker = await Worker.findOne({ phone_number: `+91${phone}` });
+      const worker = await Worker.findOne({ phone_number: phone });
 
       // ── Unregistered — run registration flow ─────────────────────────────
       if (!worker) {
