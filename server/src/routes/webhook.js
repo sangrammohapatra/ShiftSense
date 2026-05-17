@@ -561,7 +561,7 @@ router.post(
     }
 
     const phone = normalisePhone(rawFrom);
-    if (phone.length !== 10) {
+    if (!/^\+91\d{10}$/.test(phone)) {
       console.warn(
         `[Webhook] Could not normalise phone "${rawFrom}" — skipping.`,
       );
