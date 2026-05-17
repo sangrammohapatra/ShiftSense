@@ -16,35 +16,47 @@
  * the originally requested URL via location.state.from.
  */
 
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Box, Button, Stack, Typography } from "@mui/material";
+import { Link, Navigate, Route, Routes } from "react-router-dom";
 
-// ── Guards ────────────────────────────────────────────────────────────────────
 import ProtectedRoute from "@/components/ProtectedRoute";
-
-// ── Public pages ──────────────────────────────────────────────────────────────
-import LoginPage from "@/pages/LoginPage";
-import RegisterPage from "@/pages/RegisterPage";
-
-// ── Protected pages ───────────────────────────────────────────────────────────
 import Dashboard from "@/pages/Dashboard";
-import WorkerList from "@/pages/WorkerList";
-import WorkerDetail from "@/pages/WorkerDetail";
-import Reports from "@/pages/Reports";
+import LoginPage from "@/pages/LoginPage";
 import ProfilePage from "@/pages/ProfilePage";
+import RegisterPage from "@/pages/RegisterPage";
+import Reports from "@/pages/Reports";
+import WorkerDetail from "@/pages/WorkerDetail";
+import WorkerList from "@/pages/WorkerList";
+
+const NotFoundPage = () => (
+  <Box
+    sx={{
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      px: 2,
+    }}
+  >
+    <Stack spacing={2} alignItems="center" textAlign="center">
+      <Typography variant="h3">404</Typography>
+      <Typography variant="body1" color="text.secondary">
+        Page not found.
+      </Typography>
+      <Button component={Link} to="/dashboard" variant="contained" sx={{ borderRadius: 10 }}>
+        Go to Dashboard
+      </Button>
+    </Stack>
+  </Box>
+);
 
 const App = () => {
   return (
     <Routes>
-      {/* ── Public ─────────────────────────────────────────────────────────── */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
-
-      {/* ── Root redirect ──────────────────────────────────────────────────── */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-      {/* ── Protected (nested under ProtectedRoute) ─────────────────────────
-          ProtectedRoute renders <Outlet /> when authenticated, otherwise
-          redirects to /login with the original location in state.        */}
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/workers" element={<WorkerList />} />
@@ -53,16 +65,7 @@ const App = () => {
         <Route path="/profile" element={<ProfilePage />} />
       </Route>
 
-      {/* ── 404 fallback ───────────────────────────────────────────────────── */}
-      <Route
-        path="*"
-        element={
-          <div style={{ padding: "2rem", textAlign: "center" }}>
-            <h2>404 — Page not found</h2>
-            <a href="/dashboard">Go to Dashboard</a>
-          </div>
-        }
-      />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 };

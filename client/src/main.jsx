@@ -10,12 +10,14 @@
 
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { CssBaseline, ThemeProvider } from "@mui/material";
 import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
 
 import App from "./App.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
+import theme from "./theme.js";
 import "./index.css";
 
 // ─── React Query client ───────────────────────────────────────────────────────
@@ -41,20 +43,25 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
       <QueryClientProvider client={queryClient}>
-        {/* Portal renders above everything else — no z-index fight */}
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: {
-              borderRadius: "8px",
-              fontSize: "14px",
-            },
-          }}
-        />
-        <ErrorBoundary>
-          <App />
-        </ErrorBoundary>
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: {
+                borderRadius: "14px",
+                fontSize: "14px",
+                background: "#161b22",
+                color: "#e6edf3",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+              },
+            }}
+          />
+          <ErrorBoundary>
+            <App />
+          </ErrorBoundary>
+        </ThemeProvider>
       </QueryClientProvider>
     </BrowserRouter>
   </React.StrictMode>,

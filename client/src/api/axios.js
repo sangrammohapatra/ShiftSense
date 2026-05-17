@@ -14,12 +14,30 @@
 import axios from "axios";
 import useAuthStore from "@/store/authStore";
 
-// ─── Instance ─────────────────────────────────────────────────────────────────
+const resolveApiBaseUrl = () => {
+  const rawValue = String(import.meta.env.VITE_API_BASE_URL ?? "").trim();
+
+  // Ignore the placeholder example value if it accidentally made it into a build.
+  if (!rawValue || /your-service-name\.onrender\.com/i.test(rawValue)) {
+    return "/api/v1";
+  }
+
+  const withoutTrailingSlash = rawValue.replace(/\/+$/, "");
+
+  if (/^https?:\/\//i.test(withoutTrailingSlash)) {
+    return withoutTrailingSlash;
+  }
+
+  if (withoutTrailingSlash.startsWith("/")) {
+    return withoutTrailingSlash;
+  }
+
+  return `/${withoutTrailingSlash.replace(/^\/+/, "")}`;
+};
+
 const api = axios.create({
-  // In development, Vite proxies /api/v1 → http://localhost:5000
-  // In production, set VITE_API_BASE_URL in your .env
-  baseURL: import.meta.env.VITE_API_BASE_URL || "/api/v1",
-  timeout: 15_000, // 15 s — generous for slow mobile connections in India
+  baseURL: resolveApiBaseUrl(),
+  timeout: 15_000,
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -38,10 +56,7 @@ api.interceptors.request.use(
 
     return config;
   },
-  (error) => {
-    // Request failed before it left the browser (network error, bad config)
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error),
 );
 
 // ─── Response interceptor — handle 401 ───────────────────────────────────────
@@ -70,7 +85,7 @@ api.interceptors.response.use(
       "An unexpected error occurred.";
 
     return Promise.reject(new Error(message));
-  }
+  },
 );
 
 export default api;
