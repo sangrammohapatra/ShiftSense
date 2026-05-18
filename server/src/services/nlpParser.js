@@ -13,6 +13,12 @@
  * Return shape:
  *   Success: { success: true,  data: { shift_date, start_hour, end_hour, occupation, state } }
  *   Failure: { success: false, reason: string }
+ * Parses worker shift messages into structured fields.
+ *
+ * Strategy:
+ * 1. Fast deterministic parser for common shift formats.
+ * 2. Gemini structured-output fallback for free-form messages.
+ * 3. Robust JSON extraction + validation before returning.
  */
 
 const GEMINI_MODEL = "gemini-2.5-flash";
@@ -42,24 +48,153 @@ Rules:
 - Never return partial JSON. If you cannot parse anything useful, return:
   {"shift_date":null,"start_hour":null,"end_hour":null,"occupation":null,"state":null}`;
 
-// ─── Today's date in IST (UTC+5:30) ──────────────────────────────────────────
-const todayIST = () => {
-  const now = new Date();
-  // Add 5h 30m to UTC to get IST
-  const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
-  return ist.toISOString().slice(0, 10); // "YYYY-MM-DD"
+const GEMINI_RESPONSE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    shift_date: {
+      type: ["string", "null"],
+      format: "date",
+      description: "Shift date in YYYY-MM-DD format, or null.",
+    },
+    start_hour: {
+      type: ["integer", "null"],
+      minimum: 0,
+      maximum: 23,
+      description: "Shift start hour in 24-hour format, or null.",
+    },
+    end_hour: {
+      type: ["integer", "null"],
+      minimum: 0,
+      maximum: 47,
+      description: "Shift end hour in 24-hour format, or null.",
+    },
+    occupation: {
+      type: ["string", "null"],
+      enum: ["construction", "security", "domestic", "factory", "driver", null],
+      description: "Occupation category, or null.",
+    },
+    state: {
+      type: ["string", "null"],
+      description: "2-letter Indian state code if explicitly mentioned, else null.",
+    },
+  },
+  required: ["shift_date", "start_hour", "end_hour", "occupation", "state"],
+  propertyOrdering: ["shift_date", "start_hour", "end_hour", "occupation", "state"],
 };
 
-/**
- * Validates that the parsed JSON has the expected shape.
- * Returns an array of missing/invalid field names (empty = valid).
- */
+const OCCUPATION_KEYWORDS = {
+  construction: ["construction", "mason", "labour", "labor", "site", "civil"],
+  security: ["security", "guard", "watchman", "chowkidar"],
+  domestic: ["domestic", "maid", "household", "housekeeping", "cleaning", "sweeper"],
+  factory: ["factory", "manufacturing", "machine", "operator", "plant"],
+  driver: ["driver", "driving", "truck", "tempo", "cab", "vehicle"],
+};
+
+const TIME_RANGE_REGEX =
+  /(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:to|till|tak|se|-|–|—)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i;
+
+const todayIST = () => {
+  const now = new Date();
+  const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+  return ist.toISOString().slice(0, 10);
+};
+
+const shiftDateByOffset = (days) => {
+  const now = new Date();
+  const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+  ist.setUTCDate(ist.getUTCDate() + days);
+  return ist.toISOString().slice(0, 10);
+};
+
+const parseIsoDate = (year, month, day) => {
+  const y = Number(year);
+  const m = Number(month);
+  const d = Number(day);
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) {
+    return null;
+  }
+
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (
+    date.getUTCFullYear() !== y ||
+    date.getUTCMonth() !== m - 1 ||
+    date.getUTCDate() !== d
+  ) {
+    return null;
+  }
+
+  return date.toISOString().slice(0, 10);
+};
+
+const parseDateFromText = (text) => {
+  const iso = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (iso) return parseIsoDate(iso[1], iso[2], iso[3]);
+
+  const dmy = text.match(/\b(\d{2})[\/.-](\d{2})[\/.-](\d{4})\b/);
+  if (dmy) return parseIsoDate(dmy[3], dmy[2], dmy[1]);
+
+  if (/\bkal\b/i.test(text)) return shiftDateByOffset(-1);
+  if (/\baaj\b/i.test(text) || /\btoday\b/i.test(text)) return todayIST();
+
+  return null;
+};
+
+const inferOccupation = (text) => {
+  const lower = text.toLowerCase();
+  for (const [occupation, keywords] of Object.entries(OCCUPATION_KEYWORDS)) {
+    if (keywords.some((keyword) => lower.includes(keyword))) {
+      return occupation;
+    }
+  }
+  return null;
+};
+
+const parseHour = (hourText, meridiem) => {
+  let hour = Number(hourText);
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) return null;
+
+  if (meridiem) {
+    const suffix = meridiem.toLowerCase();
+    if (suffix === "am") {
+      if (hour === 12) hour = 0;
+    } else if (suffix === "pm") {
+      if (hour < 12) hour += 12;
+    }
+  }
+
+  return hour;
+};
+
+const quickParseShiftMessage = (rawText) => {
+  const normalized = String(rawText || "")
+    .replace(/[–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const match = normalized.match(TIME_RANGE_REGEX);
+  if (!match) return null;
+
+  const startHour = parseHour(match[1], match[3] || match[6] || null);
+  let endHour = parseHour(match[4], match[6] || match[3] || null);
+
+  if (startHour === null || endHour === null) return null;
+  if (endHour < startHour) endHour += 24;
+
+  return {
+    shift_date: parseDateFromText(normalized) || todayIST(),
+    start_hour: startHour,
+    end_hour: endHour,
+    occupation: inferOccupation(normalized),
+    state: null,
+  };
+};
+
 const validateParsed = (obj) => {
   const issues = [];
 
   if (typeof obj !== "object" || obj === null) return ["root"];
 
-  // start_hour and end_hour must be integers 0-47 OR null
   for (const field of ["start_hour", "end_hour"]) {
     if (obj[field] !== null) {
       if (!Number.isInteger(obj[field]) || obj[field] < 0 || obj[field] > 47) {
@@ -68,18 +203,9 @@ const validateParsed = (obj) => {
     }
   }
 
-  // occupation must be a valid enum value or null
-  const VALID_OCC = [
-    "construction",
-    "security",
-    "domestic",
-    "factory",
-    "driver",
-    null,
-  ];
-  if (!VALID_OCC.includes(obj.occupation)) issues.push("occupation");
+  const validOcc = ["construction", "security", "domestic", "factory", "driver", null];
+  if (!validOcc.includes(obj.occupation)) issues.push("occupation");
 
-  // state must be 2-letter string or null
   if (
     obj.state !== null &&
     !/^[A-Z]{2}$/.test(String(obj.state).toUpperCase())
@@ -87,16 +213,80 @@ const validateParsed = (obj) => {
     issues.push("state");
   }
 
+  if (
+    obj.shift_date !== null &&
+    !/^\d{4}-\d{2}-\d{2}$/.test(String(obj.shift_date))
+  ) {
+    issues.push("shift_date");
+  }
+
   return issues;
 };
 
-/**
- * Calls Gemini REST API (non-streaming) and returns the text response.
- *
- * @param {string} systemPrompt
- * @param {string} userMessage
- * @returns {Promise<string>} Raw text from Gemini
- */
+const stripCodeFences = (text) =>
+  String(text)
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+const extractJsonObject = (text) => {
+  const input = stripCodeFences(text);
+  const start = input.indexOf("{");
+  if (start === -1) return input;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < input.length; i++) {
+    const char = input[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{") depth++;
+    if (char === "}") {
+      depth--;
+      if (depth === 0) {
+        return input.slice(start, i + 1);
+      }
+    }
+  }
+
+  return input;
+};
+
+const parseJsonSafely = (rawContent) => {
+  const candidates = [
+    stripCodeFences(rawContent),
+    extractJsonObject(rawContent),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return null;
+};
+
 const callGemini = async (systemPrompt, userMessage) => {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is not set.");
@@ -115,8 +305,14 @@ const callGemini = async (systemPrompt, userMessage) => {
       },
     ],
     generationConfig: {
-      temperature: 0,         // deterministic — we need exact JSON
-      maxOutputTokens: 256,   // JSON response is tiny
+      temperature: 0,
+      maxOutputTokens: 256,
+      responseFormat: {
+        text: {
+          mimeType: "application/json",
+          schema: GEMINI_RESPONSE_SCHEMA,
+        },
+      },
     },
   };
 
@@ -132,20 +328,19 @@ const callGemini = async (systemPrompt, userMessage) => {
   }
 
   const data = await res.json();
+  const candidate = data?.candidates?.[0];
+  const parts = candidate?.content?.parts ?? [];
+  const text = parts
+    .map((part) => part?.text ?? "")
+    .join("")
+    .trim();
 
-  // Extract text from Gemini response shape
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-  return text.trim();
+  return {
+    text,
+    finishReason: candidate?.finishReason ?? null,
+  };
 };
 
-/**
- * Parses a raw WhatsApp shift message using Gemini AI.
- *
- * @param {string} rawText          The worker's WhatsApp message
- * @param {string} workerState      The worker's registered state (2-letter code)
- * @param {string} workerOccupation The worker's registered occupation
- * @returns {Promise<{ success: boolean, data?: object, reason?: string, ambiguous?: boolean }>}
- */
 export const parseShiftMessage = async (
   rawText,
   workerState,
@@ -153,7 +348,29 @@ export const parseShiftMessage = async (
 ) => {
   const today = todayIST();
 
-  // Enrich the user message with worker context so Claude can fill defaults
+  const quickParsed = quickParseShiftMessage(rawText);
+  if (quickParsed) {
+    if (!quickParsed.occupation && workerOccupation) {
+      quickParsed.occupation = workerOccupation;
+    }
+    if (!quickParsed.state && workerState) {
+      quickParsed.state = workerState.toUpperCase();
+    }
+
+    const ambiguous =
+      quickParsed.start_hour === null || quickParsed.end_hour === null;
+
+    console.log(
+      `[NLPParser] Parsed locally: ${JSON.stringify(quickParsed)} | ambiguous=${ambiguous}`,
+    );
+
+    return {
+      success: true,
+      ambiguous,
+      data: quickParsed,
+    };
+  }
+
   const userMessage =
     `Today's date (IST): ${today}\n` +
     `Worker's registered state: ${workerState}\n` +
@@ -161,21 +378,12 @@ export const parseShiftMessage = async (
     `Worker's message: "${rawText}"`;
 
   try {
-    const rawContent = await callGemini(SYSTEM_PROMPT, userMessage);
+    const geminiResponse = await callGemini(SYSTEM_PROMPT, userMessage);
+    const parsed = parseJsonSafely(geminiResponse.text);
 
-    // Strip markdown fences if Gemini includes them despite instructions
-    const jsonString = rawContent
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/\s*```$/i, "")
-      .trim();
-
-    let parsed;
-    try {
-      parsed = JSON.parse(jsonString);
-    } catch (parseErr) {
+    if (!parsed) {
       console.error(
-        `[NLPParser] JSON parse failed. Raw Gemini output: "${rawContent}"`,
+        `[NLPParser] JSON parse failed. finishReason=${geminiResponse.finishReason} raw="${geminiResponse.text.slice(0, 400)}"`,
       );
       return {
         success: false,
