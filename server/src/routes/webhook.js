@@ -43,7 +43,10 @@ import {
 } from "../services/rulesEngine.js";
 import { Worker, ShiftLog, Employer, DisputeLetter } from "../models/index.js";
 import { OCCUPATION_ENUM } from "../models/Worker.js";
-import { generateDisputeLetter } from "../services/disputeGenerator.js";
+import {
+  generateDisputeLetter,
+  getAccessibleDisputeLetterUrl,
+} from "../services/disputeGenerator.js";
 
 const router = Router();
 
@@ -522,6 +525,10 @@ const handleDispute = async (phone, worker) => {
     }).lean();
 
     if (existingLetter?.pdf_s3_url) {
+      const disputeUrl = await getAccessibleDisputeLetterUrl(
+        existingLetter.pdf_s3_url,
+      );
+
       await ShiftLog.findByIdAndUpdate(shiftLog._id, {
         $set: { status: "disputed" },
       });
@@ -531,7 +538,7 @@ const handleDispute = async (phone, worker) => {
           `shift=${shiftLog._id} shortfall=Rs.${shiftLog.shortfall}`,
       );
 
-      await sendWhatsApp(phone, MSG.disputeReady(existingLetter.pdf_s3_url));
+      await sendWhatsApp(phone, MSG.disputeReady(disputeUrl));
       return;
     }
 

@@ -30,11 +30,16 @@ const getS3 = () => {
     _s3 = new AWS.S3({
       accessKeyId: process.env.AWS_ACCESS_KEY,
       secretAccessKey: process.env.AWS_SECRET_KEY,
-      region: process.env.AWS_REGION || "ap-south-1",
+      region: process.env.AWS_REGION || "ap-southeast-2",
     });
   }
   return _s3;
 };
+
+const S3_REGION = process.env.AWS_REGION || "ap-southeast-2";
+const DISPUTE_URL_TTL_SECONDS = Number(
+  process.env.DISPUTE_PDF_URL_TTL_SECONDS || 60 * 60 * 24 * 7,
+);
 
 // ─── Design constants ─────────────────────────────────────────────────────────
 const COLORS = {
@@ -516,12 +521,48 @@ const buildPDFBuffer = (shiftLog, worker, employer) =>
 
 // ─── S3 uploader ──────────────────────────────────────────────────────────────
 /**
- * Uploads a Buffer to S3 and returns the public URL.
+ * Uploads a Buffer to S3 and returns both the canonical object URL and
+ * a signed download URL for private buckets.
  *
  * @param {Buffer} buffer
  * @param {string} key       S3 object key
- * @returns {Promise<string>} Public HTTPS URL
+ * @returns {Promise<{ key: string, objectUrl: string, signedUrl: string }>}
  */
+const buildObjectUrl = (bucket, key) =>
+  `https://${bucket}.s3.${S3_REGION}.amazonaws.com/${key}`;
+
+const buildSignedUrl = async (bucket, key) =>
+  getS3().getSignedUrlPromise("getObject", {
+    Bucket: bucket,
+    Key: key,
+    Expires: DISPUTE_URL_TTL_SECONDS,
+    ResponseContentType: "application/pdf",
+    ResponseContentDisposition: `inline; filename="${key.split("/").pop()}"`,
+  });
+
+const extractS3KeyFromUrl = (url, bucket) => {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== `${bucket}.s3.${S3_REGION}.amazonaws.com`) {
+      return null;
+    }
+
+    return decodeURIComponent(parsed.pathname.replace(/^\/+/, ""));
+  } catch {
+    return null;
+  }
+};
+
+export const getAccessibleDisputeLetterUrl = async (storedUrl) => {
+  const bucket = process.env.AWS_BUCKET;
+  if (!bucket || !storedUrl) return storedUrl;
+
+  const key = extractS3KeyFromUrl(storedUrl, bucket);
+  if (!key) return storedUrl;
+
+  return buildSignedUrl(bucket, key);
+};
+
 const uploadToS3 = async (buffer, key) => {
   const bucket = process.env.AWS_BUCKET;
   if (!bucket) throw new Error("AWS_BUCKET environment variable is not set.");
@@ -537,18 +578,22 @@ const uploadToS3 = async (buffer, key) => {
     })
     .promise();
 
-  return `https://${bucket}.s3.${process.env.AWS_REGION || "ap-south-1"}.amazonaws.com/${key}`;
+  return {
+    key,
+    objectUrl: buildObjectUrl(bucket, key),
+    signedUrl: await buildSignedUrl(bucket, key),
+  };
 };
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 /**
  * Generates a wage dispute letter PDF, uploads it to S3, creates a
- * DisputeLetter MongoDB document, and returns the public S3 URL.
+ * DisputeLetter MongoDB document, and returns a signed S3 URL.
  *
  * @param {object} shiftLog   Mongoose ShiftLog document
  * @param {object} worker     Mongoose Worker document
  * @param {object|null} employer  Mongoose Employer document or null
- * @returns {Promise<string>} S3 URL of the generated PDF
+ * @returns {Promise<string>} Signed S3 URL of the generated PDF
  */
 export const generateDisputeLetter = async (
   shiftLog,
@@ -563,8 +608,8 @@ export const generateDisputeLetter = async (
   const s3Key = `disputes/${worker._id}/${dateStr}-${shiftLog._id}.pdf`;
 
   // 3. Upload to S3
-  const s3Url = await uploadToS3(buffer, s3Key);
-  console.log(`[DisputeGenerator] PDF uploaded → ${s3Url}`);
+  const { objectUrl, signedUrl } = await uploadToS3(buffer, s3Key);
+  console.log(`[DisputeGenerator] PDF uploaded → ${objectUrl}`);
 
   // 4. Persist DisputeLetter record in MongoDB
   // Use upsert on shift_id to prevent duplicates if called twice
@@ -577,7 +622,7 @@ export const generateDisputeLetter = async (
         employer_id: employer?._id ?? null,
       },
       $set: {
-        pdf_s3_url: s3Url,
+        pdf_s3_url: objectUrl,
         law_sections: LAW_SECTIONS,
         total_shortfall: shiftLog.shortfall,
         generated_at: new Date(),
@@ -587,5 +632,5 @@ export const generateDisputeLetter = async (
     { upsert: true, new: true },
   );
 
-  return s3Url;
+  return signedUrl;
 };
