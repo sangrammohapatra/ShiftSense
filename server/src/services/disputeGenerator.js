@@ -67,6 +67,8 @@ const LAW_SECTIONS = [
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (n) => `Rs. ${Number(n).toFixed(2)}`;
 const yesNo = (bool) => (bool ? "Applicable" : "Not Applicable");
+const PAGE_CONTENT_START_Y = 50;
+const PAGE_BOTTOM_RESERVE = 90;
 
 /**
  * Formats a JS Date or ISO string as "15 January 2025"
@@ -89,6 +91,14 @@ const hRule = (doc, y, color = COLORS.border) => {
   doc.moveTo(50, y).lineTo(545, y).strokeColor(color).lineWidth(0.5).stroke();
 };
 
+const ensureSpace = (doc, y, requiredHeight) => {
+  const maxY = doc.page.height - PAGE_BOTTOM_RESERVE;
+  if (y + requiredHeight <= maxY) return y;
+
+  doc.addPage();
+  return PAGE_CONTENT_START_Y;
+};
+
 /**
  * Draws a two-column key-value row.
  * @param {PDFDocument} doc
@@ -100,6 +110,13 @@ const hRule = (doc, y, color = COLORS.border) => {
  */
 const kvRow = (doc, y, label, value, opts = {}) => {
   const { bold = false, valueColor = COLORS.dark } = opts;
+  const valueText = String(value);
+  const labelHeight = doc.heightOfString(label, { width: 200 });
+  const valueHeight = doc.heightOfString(valueText, { width: 280 });
+  const rowHeight = Math.max(labelHeight, valueHeight, 12) + 6;
+
+  y = ensureSpace(doc, y, rowHeight);
+
   doc
     .font(FONTS.normal)
     .fontSize(9)
@@ -109,8 +126,8 @@ const kvRow = (doc, y, label, value, opts = {}) => {
     .font(bold ? FONTS.bold : FONTS.normal)
     .fontSize(9)
     .fillColor(valueColor)
-    .text(String(value), 260, y, { width: 280 });
-  return y + 18;
+    .text(valueText, 260, y, { width: 280 });
+  return y + rowHeight;
 };
 
 // ─── PDF builder ──────────────────────────────────────────────────────────────
@@ -392,6 +409,7 @@ const buildPDFBuffer = (shiftLog, worker, employer) =>
     y += 14;
 
     // ── 7. Claimed vs owed comparison ─────────────────────────────────────────
+    y = ensureSpace(doc, y, 110);
     doc
       .font(FONTS.bold)
       .fontSize(10)
@@ -422,6 +440,7 @@ const buildPDFBuffer = (shiftLog, worker, employer) =>
     y += 16;
 
     // ── 8. Legal citations ─────────────────────────────────────────────────────
+    y = ensureSpace(doc, y, 140);
     doc
       .font(FONTS.bold)
       .fontSize(10)
@@ -430,6 +449,10 @@ const buildPDFBuffer = (shiftLog, worker, employer) =>
     y += 14;
 
     for (let i = 0; i < LAW_SECTIONS.length; i++) {
+      const lawHeight =
+        doc.heightOfString(LAW_SECTIONS[i], { width: 470, lineGap: 2 }) + 12;
+      y = ensureSpace(doc, y, lawHeight);
+
       doc
         .font(FONTS.bold)
         .fontSize(8)
@@ -440,7 +463,7 @@ const buildPDFBuffer = (shiftLog, worker, employer) =>
         .fontSize(8)
         .fillColor(COLORS.dark)
         .text(LAW_SECTIONS[i], 70, y, { width: 470, lineGap: 2 });
-      y += 32;
+      y += lawHeight;
     }
 
     y += 6;
@@ -448,6 +471,7 @@ const buildPDFBuffer = (shiftLog, worker, employer) =>
     y += 14;
 
     // ── 9. Demand paragraph ────────────────────────────────────────────────────
+    y = ensureSpace(doc, y, 150);
     doc
       .font(FONTS.bold)
       .fontSize(9.5)
@@ -455,23 +479,27 @@ const buildPDFBuffer = (shiftLog, worker, employer) =>
       .text("DEMAND", 50, y);
     y += 14;
 
+    const demandText =
+      `You are hereby demanded to pay the shortfall amount of ${fmt(shiftLog.shortfall)} ` +
+      `within fifteen (15) days of receiving this notice. ` +
+      `Failure to comply may result in a complaint being filed with the ` +
+      `Labour Commissioner under Section 20 of the Payment of Wages Act, 1936, ` +
+      `and Section 22 of the Minimum Wages Act, 1948.`;
+
     doc
       .font(FONTS.normal)
       .fontSize(9)
       .fillColor(COLORS.dark)
       .text(
-        `You are hereby demanded to pay the shortfall amount of ${fmt(shiftLog.shortfall)} ` +
-          `within fifteen (15) days of receiving this notice. ` +
-          `Failure to comply may result in a complaint being filed with the ` +
-          `Labour Commissioner under Section 20 of the Payment of Wages Act, 1936, ` +
-          `and Section 22 of the Minimum Wages Act, 1948.`,
+        demandText,
         50,
         y,
         { width: W - 100, lineGap: 3 },
       );
-    y += 60;
+    y += doc.heightOfString(demandText, { width: W - 100, lineGap: 3 }) + 12;
 
     // Worker signature block
+    y = ensureSpace(doc, y, 60);
     doc
       .font(FONTS.normal)
       .fontSize(9)
