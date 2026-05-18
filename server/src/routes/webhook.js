@@ -59,7 +59,63 @@ const isShiftMessage = (text) =>
   /\b(se|to|from|–|-)\s*\d{1,2}\s*(am|pm|baje)/i.test(text);
 
 /** True if the message is a dispute trigger */
-const isDisputeMessage = (text) => /^dispute$/i.test(text.trim());
+const DISPUTE_DATE_PATTERNS = [
+  /\b(\d{4})-(\d{2})-(\d{2})\b/,
+  /\b(\d{2})[\/.-](\d{2})[\/.-](\d{4})\b/,
+];
+
+const toIsoDate = (year, month, day) => {
+  const y = Number(year);
+  const m = Number(month);
+  const d = Number(day);
+
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) {
+    return null;
+  }
+
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (
+    date.getUTCFullYear() !== y ||
+    date.getUTCMonth() !== m - 1 ||
+    date.getUTCDate() !== d
+  ) {
+    return null;
+  }
+
+  return date.toISOString().slice(0, 10);
+};
+
+const parseDisputeRequest = (text) => {
+  const trimmed = String(text || "").trim();
+  const hasTrigger = /\bdispute\b/i.test(trimmed);
+
+  if (!hasTrigger) {
+    return { hasTrigger: false, targetDate: null, invalidDate: false };
+  }
+
+  for (const pattern of DISPUTE_DATE_PATTERNS) {
+    const match = trimmed.match(pattern);
+    if (!match) continue;
+
+    let targetDate = null;
+    if (pattern === DISPUTE_DATE_PATTERNS[0]) {
+      targetDate = toIsoDate(match[1], match[2], match[3]);
+    } else {
+      targetDate = toIsoDate(match[3], match[2], match[1]);
+    }
+
+    return {
+      hasTrigger: true,
+      targetDate,
+      invalidDate: !targetDate,
+    };
+  }
+
+  return { hasTrigger: true, targetDate: null, invalidDate: false };
+};
+
+/** True if the message is a dispute trigger */
+const isDisputeMessage = (text) => parseDisputeRequest(text).hasTrigger;
 
 // ─── Valid Indian state codes ──────────────────────────────────────────────────
 const VALID_STATE_CODES = new Set([
@@ -192,6 +248,16 @@ const MSG = {
     `⚠️ कोई योग्य शिफ्ट नहीं मिली। / No eligible shift found.\n\n` +
     `Dispute letters are generated for shifts where shortfall > Rs.50.\n` +
     `पहले अपनी शिफ्ट लॉग करें। / Please log your shift first.`,
+
+  disputeNoShiftForDate: (date) =>
+    `⚠️ ${date} की कोई योग्य शिफ्ट नहीं मिली। / No eligible shift found for ${date}.\n\n` +
+    `Dispute letters are generated only for shifts where shortfall > Rs.50.`,
+
+  disputeInvalidDate:
+    `⚠️ तारीख समझ नहीं आई। / Could not understand the dispute date.\n\n` +
+    `Please send like:\n` +
+    `_DISPUTE 2026-05-18_\n` +
+    `_18/05/2026 DISPUTE_`,
 
   disputeError:
     `⚠️ Dispute letter generation failed. Please try again later.\n` +
@@ -495,21 +561,34 @@ const handleShift = async (phone, rawText, worker, convState) => {
  * Eligibility:
  *   - shortfall > 50
  *   - status: "logged" or "disputed"
- *   - Sorted by shift_date DESC — most recent qualifying shift
+ *   - Without a date: most recent qualifying shift
+ *   - With a date: qualifying shift on that exact day
  *
  * @param {string} phone   Normalised 10-digit number
  * @param {object} worker  Mongoose Worker document
+ * @param {string|null} targetDate "YYYY-MM-DD" when a specific shift is requested
  */
-const handleDispute = async (phone, worker) => {
-  // 1. Find the most recent qualifying shift
-  const shiftLog = await ShiftLog.findOne({
+const handleDispute = async (phone, worker, targetDate = null) => {
+  const shiftFilter = {
     worker_id: worker._id,
     status: { $in: ["logged", "disputed"] },
     shortfall: { $gt: 50 },
-  }).sort({ shift_date: -1 });
+  };
+
+  if (targetDate) {
+    const start = new Date(`${targetDate}T00:00:00.000Z`);
+    const end = new Date(start.getTime() + 86_400_000);
+    shiftFilter.shift_date = { $gte: start, $lt: end };
+  }
+
+  // 1. Find the qualifying shift
+  const shiftLog = await ShiftLog.findOne(shiftFilter).sort({ shift_date: -1 });
 
   if (!shiftLog) {
-    await sendWhatsApp(phone, MSG.disputeNoShift);
+    await sendWhatsApp(
+      phone,
+      targetDate ? MSG.disputeNoShiftForDate(targetDate) : MSG.disputeNoShift,
+    );
     return;
   }
 
@@ -610,7 +689,14 @@ router.post(
 
       // DISPUTE trigger
       if (isDisputeMessage(rawBody)) {
-        await handleDispute(phone, worker);
+        const disputeRequest = parseDisputeRequest(rawBody);
+
+        if (disputeRequest.invalidDate) {
+          await sendWhatsApp(phone, MSG.disputeInvalidDate);
+          return;
+        }
+
+        await handleDispute(phone, worker, disputeRequest.targetDate);
         return;
       }
 
