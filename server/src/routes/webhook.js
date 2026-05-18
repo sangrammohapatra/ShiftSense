@@ -41,7 +41,7 @@ import {
   calculateEntitlement,
   buildEntitlementMessage,
 } from "../services/rulesEngine.js";
-import { Worker, ShiftLog, Employer } from "../models/index.js";
+import { Worker, ShiftLog, Employer, DisputeLetter } from "../models/index.js";
 import { OCCUPATION_ENUM } from "../models/Worker.js";
 import { generateDisputeLetter } from "../services/disputeGenerator.js";
 
@@ -470,7 +470,7 @@ const handleShift = async (phone, rawText, worker, convState) => {
     net_owed: entitlement.net_owed,
     claimed_amount: entitlement.claimed_amount,
     shortfall: entitlement.shortfall,
-    status: entitlement.dispute_triggered ? "disputed" : "logged",
+    status: "logged",
     raw_message: rawText.slice(0, 500),
   });
 
@@ -490,8 +490,8 @@ const handleShift = async (phone, rawText, worker, convState) => {
  * PDF dispute letter, updates the ShiftLog status, and sends the PDF URL.
  *
  * Eligibility:
- *   - status: "logged"  (not yet disputed)
- *   - shortfall > 50    (material underpayment)
+ *   - shortfall > 50
+ *   - status: "logged" or "disputed"
  *   - Sorted by shift_date DESC — most recent qualifying shift
  *
  * @param {string} phone   Normalised 10-digit number
@@ -501,7 +501,7 @@ const handleDispute = async (phone, worker) => {
   // 1. Find the most recent qualifying shift
   const shiftLog = await ShiftLog.findOne({
     worker_id: worker._id,
-    status: "logged",
+    status: { $in: ["logged", "disputed"] },
     shortfall: { $gt: 50 },
   }).sort({ shift_date: -1 });
 
@@ -517,6 +517,24 @@ const handleDispute = async (phone, worker) => {
   }
 
   try {
+    const existingLetter = await DisputeLetter.findOne({
+      shift_id: shiftLog._id,
+    }).lean();
+
+    if (existingLetter?.pdf_s3_url) {
+      await ShiftLog.findByIdAndUpdate(shiftLog._id, {
+        $set: { status: "disputed" },
+      });
+
+      console.log(
+        `[Webhook] Reusing dispute letter for worker=${worker._id} ` +
+          `shift=${shiftLog._id} shortfall=Rs.${shiftLog.shortfall}`,
+      );
+
+      await sendWhatsApp(phone, MSG.disputeReady(existingLetter.pdf_s3_url));
+      return;
+    }
+
     // 3. Generate PDF + upload to S3 + persist DisputeLetter record
     const s3Url = await generateDisputeLetter(shiftLog, worker, employer);
 
