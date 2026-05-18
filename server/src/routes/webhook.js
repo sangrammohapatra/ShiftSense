@@ -481,7 +481,14 @@ const handleShift = async (phone, rawText, worker, convState) => {
     parsedData = parseResult.data;
   }
 
-  const { shift_date, start_hour, end_hour, occupation, state } = parsedData;
+  const {
+    shift_date,
+    start_hour,
+    end_hour,
+    occupation,
+    state,
+    claimed_amount,
+  } = parsedData;
 
   // Use worker's profile values as fallback for occupation and state
   const effectiveOccupation = occupation || worker.occupation;
@@ -509,6 +516,7 @@ const handleShift = async (phone, rawText, worker, convState) => {
       end_hour,
       state: effectiveState,
       occupation: effectiveOccupation,
+      claimed_amount,
     },
     worker,
   );

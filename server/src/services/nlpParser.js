@@ -11,7 +11,7 @@
  * safely and validated before being returned to the caller.
  *
  * Return shape:
- *   Success: { success: true,  data: { shift_date, start_hour, end_hour, occupation, state } }
+ *   Success: { success: true,  data: { shift_date, start_hour, end_hour, occupation, state, claimed_amount } }
  *   Failure: { success: false, reason: string }
  * Parses worker shift messages into structured fields.
  *
@@ -34,7 +34,8 @@ Return ONLY a valid JSON object with exactly these fields:
   "start_hour": <integer 0-23 or null>,
   "end_hour": <integer 0-23 or null>,
   "occupation": "<string from: construction, security, domestic, factory, driver> or null",
-  "state": "<2-letter Indian state code> or null"
+  "state": "<2-letter Indian state code> or null",
+  "claimed_amount": <number or null>
 }
 
 Rules:
@@ -44,9 +45,10 @@ Rules:
 - end_hour may exceed 23 for overnight shifts (e.g. shift ends at 2am next day → 26).
 - occupation: infer from message or worker context. null if truly unclear.
 - state: only set if explicitly mentioned in the message. null otherwise.
+- claimed_amount: amount the worker says they received/got/was paid/take-home for that shift. Use a number only when explicitly mentioned. Otherwise null.
 - Never add any explanation, markdown, or text outside the JSON object.
 - Never return partial JSON. If you cannot parse anything useful, return:
-  {"shift_date":null,"start_hour":null,"end_hour":null,"occupation":null,"state":null}`;
+  {"shift_date":null,"start_hour":null,"end_hour":null,"occupation":null,"state":null,"claimed_amount":null}`;
 
 const GEMINI_RESPONSE_SCHEMA = {
   type: "object",
@@ -78,9 +80,14 @@ const GEMINI_RESPONSE_SCHEMA = {
       type: ["string", "null"],
       description: "2-letter Indian state code if explicitly mentioned, else null.",
     },
+    claimed_amount: {
+      type: ["number", "null"],
+      minimum: 0,
+      description: "Amount worker says they received for the shift, or null.",
+    },
   },
-  required: ["shift_date", "start_hour", "end_hour", "occupation", "state"],
-  propertyOrdering: ["shift_date", "start_hour", "end_hour", "occupation", "state"],
+  required: ["shift_date", "start_hour", "end_hour", "occupation", "state", "claimed_amount"],
+  propertyOrdering: ["shift_date", "start_hour", "end_hour", "occupation", "state", "claimed_amount"],
 };
 
 const OCCUPATION_KEYWORDS = {
@@ -140,6 +147,27 @@ const parseDateFromText = (text) => {
   return null;
 };
 
+const CLAIMED_AMOUNT_PATTERNS = [
+  /\b(?:got|received|paid|payment|take\s*home|takehome|salary|wage|earned|mila|mili|milaa)\s*(?:rs\.?\s*)?(\d{2,6})(?:\.\d{1,2})?\b/i,
+  /\b(?:rs\.?\s*)?(\d{2,6})(?:\.\d{1,2})?\s*(?:rupees|rs|paid|payment|take\s*home|takehome|salary|wage|earned|mila|mili|milaa)\b/i,
+];
+
+const parseClaimedAmountFromText = (text) => {
+  const normalized = String(text || "").replace(/,/g, "");
+
+  for (const pattern of CLAIMED_AMOUNT_PATTERNS) {
+    const match = normalized.match(pattern);
+    if (!match) continue;
+
+    const value = Number(match[1]);
+    if (Number.isFinite(value) && value >= 0) {
+      return value;
+    }
+  }
+
+  return null;
+};
+
 const inferOccupation = (text) => {
   const lower = text.toLowerCase();
   for (const [occupation, keywords] of Object.entries(OCCUPATION_KEYWORDS)) {
@@ -187,6 +215,7 @@ const quickParseShiftMessage = (rawText) => {
     end_hour: endHour,
     occupation: inferOccupation(normalized),
     state: null,
+    claimed_amount: parseClaimedAmountFromText(normalized),
   };
 };
 
@@ -218,6 +247,13 @@ const validateParsed = (obj) => {
     !/^\d{4}-\d{2}-\d{2}$/.test(String(obj.shift_date))
   ) {
     issues.push("shift_date");
+  }
+
+  if (
+    obj.claimed_amount !== null &&
+    (!Number.isFinite(obj.claimed_amount) || obj.claimed_amount < 0)
+  ) {
+    issues.push("claimed_amount");
   }
 
   return issues;
@@ -306,7 +342,7 @@ const callGemini = async (systemPrompt, userMessage) => {
     ],
     generationConfig: {
       temperature: 0,
-      maxOutputTokens: 256,
+      maxOutputTokens: 320,
       responseFormat: {
         text: {
           mimeType: "application/json",
@@ -405,6 +441,7 @@ export const parseShiftMessage = async (
     if (!parsed.state && workerState) parsed.state = workerState.toUpperCase();
     if (!parsed.occupation && workerOccupation)
       parsed.occupation = workerOccupation;
+    if (typeof parsed.claimed_amount === "undefined") parsed.claimed_amount = null;
 
     // Fallback date
     if (!parsed.shift_date) parsed.shift_date = today;

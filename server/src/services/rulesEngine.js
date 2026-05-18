@@ -67,6 +67,7 @@ export const getMinWage = async (state, occupation) => {
  *   @param {number} shiftData.end_hour           0-47 (overnight allowed)
  *   @param {string} shiftData.state              2-letter state code
  *   @param {string} shiftData.occupation
+ *   @param {number|null} shiftData.claimed_amount Worker-reported amount received
  * @param {object} worker
  *   @param {number|null} worker.claimed_daily_wage  Employer's stated daily wage
  *
@@ -91,7 +92,7 @@ export const getMinWage = async (state, occupation) => {
  * }>}
  */
 export const calculateEntitlement = async (shiftData, worker) => {
-  const { start_hour, end_hour, state, occupation } = shiftData;
+  const { start_hour, end_hour, state, occupation, claimed_amount } = shiftData;
 
   // ── Step 1: fetch minimum wage ────────────────────────────────────────────
   const wageRule = await getMinWage(state, occupation);
@@ -133,8 +134,11 @@ export const calculateEntitlement = async (shiftData, worker) => {
   const netOwed = round2(grossOwed - epfDeduction - esiDeduction);
 
   // ── Step 7: shortfall vs employer's claimed wage ──────────────────────────
-  // Use employer's claimed_daily_wage as the baseline if set; otherwise 0
-  const claimedAmount = round2(worker.claimed_daily_wage ?? 0);
+  // Prefer the worker-reported amount from the message; otherwise fall back to the profile default.
+  const hasMessageClaimedAmount = Number.isFinite(claimed_amount);
+  const claimedAmount = round2(
+    hasMessageClaimedAmount ? claimed_amount : (worker.claimed_daily_wage ?? 0),
+  );
   const shortfall = round2(grossOwed - claimedAmount);
   const disputeTriggered = shortfall > DISPUTE_THRESHOLD;
 
