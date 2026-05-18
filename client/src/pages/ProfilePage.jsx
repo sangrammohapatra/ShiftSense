@@ -10,83 +10,84 @@
  */
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Grid,
+  MenuItem,
+  Paper,
+  Skeleton,
+  Stack,
+  Typography,
+} from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
 import {
   Building2,
-  User,
-  Mail,
-  Phone,
-  MapPin,
-  FileText,
-  Users,
-  Pencil,
-  X,
-  Loader2,
   CheckCircle2,
+  FileText,
+  Mail,
+  MapPin,
+  Pencil,
+  Phone,
+  User,
+  Users,
+  X,
 } from "lucide-react";
 
 import api from "@/api/axios";
+import Layout from "@/components/Layout";
 import FormField from "@/components/ui/FormField";
 import { INDIAN_STATES } from "@/constants/india";
 
-// ─── Data fetcher ─────────────────────────────────────────────────────────────
 const fetchProfile = async () => {
-  const res = await api.get("/auth/me");
-  return res.data.data.employer;
+  const response = await api.get("/auth/me");
+  return response.data.data.employer;
 };
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-/** Single read-only info row */
-const InfoRow = ({ icon: Icon, label, value }) => (
-  <div
-    className="flex items-start gap-3 py-3"
-    style={{ borderBottom: "1px solid var(--border)" }}
+const ReadOnlyRow = ({ icon: Icon, label, value, divider = true }) => (
+  <Stack
+    direction="row"
+    spacing={1.5}
+    alignItems="flex-start"
+    sx={{
+      py: 2,
+      borderBottom: divider ? "1px solid" : "none",
+      borderColor: "divider",
+    }}
   >
-    <div
-      className="mt-0.5 flex-shrink-0"
-      style={{ color: "var(--text-muted)" }}
-    >
-      <Icon size={15} />
-    </div>
-    <div className="min-w-0 flex-1">
-      <p
-        className="text-xs mb-0.5 uppercase tracking-widest"
-        style={{
-          color: "var(--text-muted)",
-          fontFamily: "var(--font-display)",
-        }}
-      >
+    <Box sx={{ color: "text.secondary", pt: 0.25 }}>
+      <Icon size={16} />
+    </Box>
+    <Box sx={{ minWidth: 0 }}>
+      <Typography variant="overline" sx={{ color: "text.secondary" }}>
         {label}
-      </p>
-      <p
-        className="text-sm font-medium break-words"
-        style={{ color: "var(--text-primary)" }}
-      >
-        {value || <span style={{ color: "var(--text-muted)" }}>—</span>}
-      </p>
-    </div>
-  </div>
+      </Typography>
+      <Typography variant="body1" sx={{ fontWeight: 600, wordBreak: "break-word" }}>
+        {value || "—"}
+      </Typography>
+    </Box>
+  </Stack>
 );
 
-/** Plan badge */
 const PlanBadge = ({ plan }) => {
-  const isPro = plan === "pro";
+  const isPro = String(plan).toLowerCase() === "pro";
+
   return (
-    <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-bold tracking-widest uppercase"
-      style={{
-        fontFamily: "var(--font-display)",
-        background: isPro ? "var(--accent)" : "var(--bg-elevated)",
-        color: isPro ? "#000" : "var(--text-secondary)",
-        border: isPro ? "none" : "1px solid var(--border)",
-        borderRadius: "var(--radius-sm)",
+    <Chip
+      size="small"
+      label={isPro ? "PRO" : "FREE"}
+      color={isPro ? "primary" : "default"}
+      sx={{
+        borderRadius: 10,
+        fontFamily: '"IBM Plex Mono", monospace',
+        fontWeight: 700,
       }}
-    >
-      {isPro ? "● PRO" : "FREE"}
-    </span>
+    />
   );
 };
 
@@ -109,361 +110,277 @@ const EditForm = ({ employer, onCancel, onSaved }) => {
   });
 
   const onSubmit = async (data) => {
-    // Only send fields that have values (don't overwrite with empty strings)
-    const payload = Object.fromEntries(
-      Object.entries(data).filter(([, v]) => v !== ""),
-    );
+    const payload = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== ""));
 
     try {
       await api.patch("/auth/me", payload);
-      // Invalidate the cached profile so the view re-fetches fresh data
       await queryClient.invalidateQueries({ queryKey: ["profile"] });
       toast.success("Profile updated.");
       onSaved();
-    } catch (err) {
-      toast.error(err.message || "Update failed. Please try again.");
+    } catch (error) {
+      toast.error(error.message || "Update failed. Please try again.");
     }
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        <FormField
-          label="Company name"
-          id="edit_company_name"
-          error={errors.company_name?.message}
-          reg={register("company_name", {
-            required: "Company name is required.",
-            maxLength: { value: 150, message: "Max 150 characters." },
-          })}
-        />
-        <FormField
-          label="Contact name"
-          id="edit_contact_name"
-          error={errors.contact_name?.message}
-          reg={register("contact_name", {
-            required: "Contact name is required.",
-            maxLength: { value: 100, message: "Max 100 characters." },
-          })}
-        />
-      </div>
+    <Stack component="form" spacing={2} onSubmit={handleSubmit(onSubmit)} noValidate>
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={6}>
+          <FormField
+            label="Company name"
+            id="edit_company_name"
+            error={errors.company_name?.message}
+            reg={register("company_name", {
+              required: "Company name is required.",
+              maxLength: { value: 150, message: "Max 150 characters." },
+            })}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormField
+            label="Contact name"
+            id="edit_contact_name"
+            error={errors.contact_name?.message}
+            reg={register("contact_name", {
+              required: "Contact name is required.",
+              maxLength: { value: 100, message: "Max 100 characters." },
+            })}
+          />
+        </Grid>
+      </Grid>
 
-      <div className="grid grid-cols-2 gap-3">
-        <FormField
-          label="Phone"
-          id="edit_phone"
-          type="tel"
-          error={errors.phone?.message}
-          reg={register("phone", {
-            pattern: {
-              value: /^\+?[1-9]\d{7,14}$/,
-              message: "Enter a valid phone number.",
-            },
-          })}
-        />
-
-        {/* State dropdown */}
-        <div>
-          <label htmlFor="edit_state" className="ss-label">
-            State
-          </label>
-          <select
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={6}>
+          <FormField
+            label="Phone"
+            id="edit_phone"
+            type="tel"
+            error={errors.phone?.message}
+            reg={register("phone", {
+              pattern: {
+                value: /^\+?[1-9]\d{7,14}$/,
+                message: "Enter a valid phone number.",
+              },
+            })}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormField
+            label="State"
             id="edit_state"
-            className={`ss-input ${errors.state ? "error" : ""}`}
-            style={{ cursor: "pointer" }}
-            {...register("state")}
+            select
+            error={errors.state?.message}
+            reg={register("state")}
           >
-            <option value="">Select state</option>
-            {INDIAN_STATES.map((s) => (
-              <option key={s.code} value={s.code}>
-                {s.code} — {s.name}
-              </option>
+            <MenuItem value="">Select state</MenuItem>
+            {INDIAN_STATES.map((state) => (
+              <MenuItem key={state.code} value={state.code}>
+                {state.code} - {state.name}
+              </MenuItem>
             ))}
-          </select>
-          {errors.state && (
-            <p className="ss-field-error">{errors.state.message}</p>
-          )}
-        </div>
-      </div>
+          </FormField>
+        </Grid>
+      </Grid>
 
       <FormField
         label="GST number (optional)"
         id="edit_gst_number"
         placeholder="27AAPFU0939F1ZV"
         error={errors.gst_number?.message}
-        className="uppercase tracking-widest"
         reg={register("gst_number", {
           pattern: {
             value: /^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}$/,
             message: "Enter a valid 15-character GSTIN.",
           },
-          setValueAs: (v) => v?.toUpperCase() || "",
+          setValueAs: (value) => value?.toUpperCase() || "",
         })}
+        inputProps={{ style: { textTransform: "uppercase", letterSpacing: "0.08em" } }}
       />
 
-      {/* Note: email and password are changed via separate flows */}
-      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+      <Typography variant="caption" color="text.secondary">
         Email and password can only be changed via account settings.
-      </p>
+      </Typography>
 
-      <div className="flex gap-2 pt-1">
-        <button
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+        <Button
           type="submit"
           disabled={isSubmitting || !isDirty}
-          className="ss-btn flex-1"
+          variant="contained"
+          startIcon={<CheckCircle2 size={16} />}
+          sx={{ flex: 1, borderRadius: 10, minHeight: 48 }}
         >
-          {isSubmitting ? (
-            <>
-              <Loader2 size={14} className="animate-spin" /> Saving…
-            </>
-          ) : (
-            <>
-              <CheckCircle2 size={14} /> Save Changes
-            </>
-          )}
-        </button>
-        <button
+          Save Changes
+        </Button>
+        <Button
           type="button"
-          onClick={onCancel}
           disabled={isSubmitting}
-          className="ss-btn-ghost"
+          variant="outlined"
+          color="inherit"
+          startIcon={<X size={16} />}
+          onClick={onCancel}
+          sx={{ borderRadius: 10, minHeight: 48 }}
         >
-          <X size={14} /> Cancel
-        </button>
-      </div>
-    </form>
+          Cancel
+        </Button>
+      </Stack>
+    </Stack>
   );
 };
 
 // ─── Skeleton loader ──────────────────────────────────────────────────────────
 const ProfileSkeleton = () => (
-  <div className="space-y-4 animate-pulse">
-    {[...Array(5)].map((_, i) => (
-      <div
-        key={i}
-        className="flex gap-3 py-3"
-        style={{ borderBottom: "1px solid var(--border)" }}
+  <Stack spacing={2}>
+    {[0, 1, 2, 3, 4].map((item) => (
+      <Stack
+        key={item}
+        direction="row"
+        spacing={2}
+        alignItems="center"
+        sx={{ py: 1.5, borderBottom: "1px solid", borderColor: "divider" }}
       >
-        <div
-          className="w-4 h-4 rounded mt-0.5 flex-shrink-0"
-          style={{ background: "var(--bg-elevated)" }}
-        />
-        <div className="flex-1 space-y-2">
-          <div
-            className="h-2 w-16 rounded"
-            style={{ background: "var(--bg-elevated)" }}
-          />
-          <div
-            className="h-3 w-40 rounded"
-            style={{ background: "var(--bg-elevated)" }}
-          />
-        </div>
-      </div>
+        <Skeleton variant="circular" width={18} height={18} />
+        <Box sx={{ flex: 1 }}>
+          <Skeleton variant="text" width={90} />
+          <Skeleton variant="text" width="50%" height={30} />
+        </Box>
+      </Stack>
     ))}
-  </div>
+  </Stack>
 );
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 const ProfilePage = () => {
+  const theme = useTheme();
   const [editMode, setEditMode] = useState(false);
 
-  const {
-    data: employer,
-    isLoading,
-    isError,
-    error,
-  } = useQuery({
+  const { data: employer, isLoading, isError, error } = useQuery({
     queryKey: ["profile"],
     queryFn: fetchProfile,
   });
 
-  // ── Error state ─────────────────────────────────────────────────────────────
+  const stateName = employer
+    ? INDIAN_STATES.find((state) => state.code === employer.state)?.name ?? employer.state
+    : null;
+
   if (isError) {
     return (
-      <div
-        className="max-w-2xl mx-auto mt-12 ss-card p-8 text-center"
-        style={{ color: "var(--danger)" }}
-      >
-        <p className="font-medium mb-1">Failed to load profile</p>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          {error?.message || "An unexpected error occurred."}
-        </p>
-      </div>
+      <Layout>
+        <Box sx={{ maxWidth: 720, mx: "auto", px: 3, py: 5 }}>
+          <Alert severity="error" sx={{ borderRadius: 1 }}>
+            {error?.message || "Failed to load profile."}
+          </Alert>
+        </Box>
+      </Layout>
     );
   }
 
-  // Resolve state name for display
-  const stateName = employer
-    ? (INDIAN_STATES.find((s) => s.code === employer.state)?.name ??
-      employer.state)
-    : null;
-
   return (
-    <div className="max-w-2xl mx-auto py-8 px-4">
-      {/* Page header */}
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1
-            className="text-xl font-semibold"
-            style={{
-              fontFamily: "var(--font-display)",
-              color: "var(--text-primary)",
-            }}
+    <Layout>
+      <Box sx={{ maxWidth: 980, mx: "auto", px: { xs: 2, md: 3 }, py: { xs: 3, md: 4 } }}>
+        <Stack spacing={3}>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={2}
+            justifyContent="space-between"
+            alignItems={{ xs: "flex-start", sm: "center" }}
           >
-            Company Profile
-          </h1>
-          <p
-            className="text-sm mt-0.5"
-            style={{ color: "var(--text-secondary)" }}
-          >
-            Manage your account information and billing plan.
-          </p>
-        </div>
+            <Box>
+              <Typography variant="h4">Company Profile</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Manage your account information and billing plan.
+              </Typography>
+            </Box>
 
-        {!isLoading && !editMode && (
-          <button
-            onClick={() => setEditMode(true)}
-            className="ss-btn-ghost flex items-center gap-2"
-          >
-            <Pencil size={13} />
-            Edit
-          </button>
-        )}
-      </div>
-
-      {/* Stats strip */}
-      {!isLoading && employer && (
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          {/* Plan */}
-          <div
-            className="ss-card p-4 flex flex-col gap-2"
-            style={{
-              borderColor:
-                employer.plan === "pro" ? "var(--accent)" : "var(--border)",
-            }}
-          >
-            <p
-              className="text-xs uppercase tracking-widest"
-              style={{
-                color: "var(--text-muted)",
-                fontFamily: "var(--font-display)",
-              }}
-            >
-              Current plan
-            </p>
-            <div className="flex items-center gap-2">
-              <PlanBadge plan={employer.plan} />
-            </div>
-          </div>
-
-          {/* Workers */}
-          <div className="ss-card p-4 flex flex-col gap-2">
-            <p
-              className="text-xs uppercase tracking-widest"
-              style={{
-                color: "var(--text-muted)",
-                fontFamily: "var(--font-display)",
-              }}
-            >
-              Linked workers
-            </p>
-            <div className="flex items-center gap-2">
-              <Users size={16} style={{ color: "var(--accent)" }} />
-              <span
-                className="text-2xl font-bold"
-                style={{
-                  fontFamily: "var(--font-display)",
-                  color: "var(--text-primary)",
-                }}
+            {!isLoading && !editMode ? (
+              <Button
+                onClick={() => setEditMode(true)}
+                variant="outlined"
+                startIcon={<Pencil size={16} />}
+                sx={{ borderRadius: 10 }}
               >
-                {employer.worker_count ?? 0}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
+                Edit Profile
+              </Button>
+            ) : null}
+          </Stack>
 
-      {/* Main card */}
-      <div className="ss-card p-6">
-        {isLoading ? (
-          <ProfileSkeleton />
-        ) : editMode ? (
-          <>
-            <p
-              className="text-xs uppercase tracking-widest mb-4 pb-3"
-              style={{
-                color: "var(--accent)",
-                fontFamily: "var(--font-display)",
-                borderBottom: "1px solid var(--border)",
-              }}
-            >
-              ● Editing profile
-            </p>
-            <EditForm
-              employer={employer}
-              onCancel={() => setEditMode(false)}
-              onSaved={() => setEditMode(false)}
-            />
-          </>
-        ) : (
-          <>
-            <InfoRow
-              icon={Building2}
-              label="Company name"
-              value={employer.company_name}
-            />
-            <InfoRow
-              icon={User}
-              label="Contact name"
-              value={employer.contact_name}
-            />
-            <InfoRow icon={Mail} label="Email address" value={employer.email} />
-            <InfoRow icon={Phone} label="Phone" value={employer.phone} />
-            <InfoRow icon={MapPin} label="State" value={stateName} />
-            <InfoRow
-              icon={FileText}
-              label="GST number"
-              value={employer.gst_number}
-            />
-            {/* Last row — no bottom border */}
-            <div className="flex items-start gap-3 pt-3">
-              <div
-                className="mt-0.5 flex-shrink-0"
-                style={{ color: "var(--text-muted)" }}
-              >
-                <Building2 size={15} />
-              </div>
-              <div>
-                <p
-                  className="text-xs mb-0.5 uppercase tracking-widest"
-                  style={{
-                    color: "var(--text-muted)",
-                    fontFamily: "var(--font-display)",
+          {!isLoading && employer ? (
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Paper
+                  sx={{
+                    p: 2.5,
+                    borderRadius: 1,
+                    borderColor:
+                      employer.plan === "pro"
+                        ? alpha(theme.palette.primary.main, 0.28)
+                        : "divider",
                   }}
                 >
-                  Member since
-                </p>
-                <p
-                  className="text-sm font-medium"
-                  style={{ color: "var(--text-primary)" }}
-                >
-                  {employer.created_at
-                    ? new Date(employer.created_at).toLocaleDateString(
-                        "en-IN",
-                        {
+                  <Typography variant="overline" color="text.secondary">
+                    Current plan
+                  </Typography>
+                  <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mt: 1.5 }}>
+                    <PlanBadge plan={employer.plan} />
+                  </Stack>
+                </Paper>
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <Paper sx={{ p: 2.5, borderRadius: 1 }}>
+                  <Typography variant="overline" color="text.secondary">
+                    Linked workers
+                  </Typography>
+                  <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mt: 1.5 }}>
+                    <Users size={18} color={theme.palette.primary.main} />
+                    <Typography variant="h4">{employer.worker_count ?? 0}</Typography>
+                  </Stack>
+                </Paper>
+              </Grid>
+            </Grid>
+          ) : null}
+
+          <Paper sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 1 }}>
+            {isLoading ? (
+              <ProfileSkeleton />
+            ) : editMode ? (
+              <Stack spacing={2.5}>
+                <Typography variant="overline" color="primary.main">
+                  Editing profile
+                </Typography>
+                <EditForm
+                  employer={employer}
+                  onCancel={() => setEditMode(false)}
+                  onSaved={() => setEditMode(false)}
+                />
+              </Stack>
+            ) : (
+              <Box>
+                <ReadOnlyRow icon={Building2} label="Company name" value={employer.company_name} />
+                <ReadOnlyRow icon={User} label="Contact name" value={employer.contact_name} />
+                <ReadOnlyRow icon={Mail} label="Email address" value={employer.email} />
+                <ReadOnlyRow icon={Phone} label="Phone" value={employer.phone} />
+                <ReadOnlyRow icon={MapPin} label="State" value={stateName} />
+                <ReadOnlyRow icon={FileText} label="GST number" value={employer.gst_number} />
+                <ReadOnlyRow
+                  icon={Building2}
+                  label="Member since"
+                  divider={false}
+                  value={
+                    employer.created_at
+                      ? new Date(employer.created_at).toLocaleDateString("en-IN", {
                           day: "numeric",
                           month: "long",
                           year: "numeric",
-                        },
-                      )
-                    : "—"}
-                </p>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+                        })
+                      : "—"
+                  }
+                />
+              </Box>
+            )}
+          </Paper>
+        </Stack>
+      </Box>
+    </Layout>
   );
 };
 

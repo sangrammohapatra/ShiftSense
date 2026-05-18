@@ -24,7 +24,17 @@
  *   - Server-side rendering errors
  */
 
+import { AlertTriangle } from "lucide-react";
 import { Component } from "react";
+import {
+  Box,
+  Button,
+  Container,
+  Paper,
+  Stack,
+  Typography,
+} from "@mui/material";
+import { alpha } from "@mui/material/styles";
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -57,8 +67,12 @@ class ErrorBoundary extends Component {
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: null, errorInfo: null });
-    // Navigate to home as a clean reset
+    this.setState({
+      hasError: false,
+      error: null,
+      errorInfo: null,
+      errorCode: Date.now().toString(36).toUpperCase(),
+    });
     window.location.href = "/dashboard";
   };
 
@@ -67,175 +81,110 @@ class ErrorBoundary extends Component {
       return this.props.children;
     }
 
-    const { error, errorInfo } = this.state;
+    const { error, errorInfo, errorCode } = this.state;
     const isProd = import.meta.env.PROD;
 
     return (
-      <div
-        style={{
-          minHeight:      "100vh",
-          display:        "flex",
-          alignItems:     "center",
+      <Box
+        sx={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
           justifyContent: "center",
-          padding:        "2rem",
-          background:     "var(--bg-base)",
-          backgroundImage: `
-            linear-gradient(rgba(240,165,0,0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(240,165,0,0.03) 1px, transparent 1px)
-          `,
-          backgroundSize: "40px 40px",
+          px: 2,
+          py: 6,
+          bgcolor: "background.default",
+          backgroundImage:
+            "radial-gradient(circle at top right, rgba(240,165,0,0.12), transparent 24%), radial-gradient(circle at bottom left, rgba(88,166,255,0.12), transparent 20%)",
         }}
       >
-        <div
-          style={{
-            maxWidth:     "480px",
-            width:        "100%",
-            background:   "var(--bg-surface)",
-            border:       "1px solid var(--border)",
-            borderRadius: "var(--radius-lg)",
-            padding:      "2rem",
-            boxShadow:    "0 24px 64px rgba(0,0,0,0.4)",
-          }}
-        >
-          {/* Icon */}
-          <div
-            style={{
-              width:        "48px",
-              height:       "48px",
-              background:   "rgba(248,81,73,0.12)",
-              borderRadius: "var(--radius)",
-              display:      "flex",
-              alignItems:   "center",
-              justifyContent: "center",
-              marginBottom: "1rem",
-            }}
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-              stroke="#f85149" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="8" x2="12" y2="12"/>
-              <line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-          </div>
-
-          {/* Heading */}
-          <h1
-            style={{
-              fontFamily: "var(--font-display)",
-              fontSize:   "1.1rem",
-              fontWeight: 700,
-              color:      "var(--text-primary)",
-              margin:     "0 0 0.5rem",
-            }}
-          >
-            Something went wrong
-          </h1>
-
-          <p
-            style={{
-              fontSize:   "0.875rem",
-              color:      "var(--text-secondary)",
-              margin:     "0 0 1.5rem",
-              lineHeight: 1.6,
-            }}
-          >
-            An unexpected error occurred in the ShiftSense dashboard.
-            Your data is safe — this is a display error only.
-          </p>
-
-          {/* Error detail (dev only) */}
-          {!isProd && error && (
-            <details
-              style={{
-                marginBottom: "1.5rem",
-                background:   "var(--bg-elevated)",
-                border:       "1px solid var(--border)",
-                borderRadius: "var(--radius)",
-                padding:      "0.75rem",
-              }}
-            >
-              <summary
-                style={{
-                  cursor:     "pointer",
-                  fontSize:   "0.75rem",
-                  color:      "var(--text-muted)",
-                  fontFamily: "var(--font-display)",
-                  userSelect: "none",
+        <Container maxWidth="sm">
+          <Paper sx={{ p: { xs: 3, sm: 4 }, borderRadius: 1 }}>
+            <Stack spacing={3}>
+              <Box
+                sx={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 1,
+                  display: "grid",
+                  placeItems: "center",
+                  bgcolor: alpha("#f85149", 0.14),
+                  color: "error.main",
                 }}
               >
-                Error details (development only)
-              </summary>
-              <pre
-                style={{
-                  marginTop:  "0.75rem",
-                  fontSize:   "0.7rem",
-                  color:      "#f85149",
-                  overflow:   "auto",
-                  whiteSpace: "pre-wrap",
-                  fontFamily: "var(--font-display)",
-                  lineHeight: 1.5,
+                <AlertTriangle size={24} />
+              </Box>
+
+              <Box>
+                <Typography variant="h5">Something went wrong</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+                  An unexpected error occurred in the ShiftSense dashboard. Your
+                  data is safe; this is a display error only.
+                </Typography>
+              </Box>
+
+              {!isProd && error ? (
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    p: 2,
+                    borderRadius: 1,
+                    bgcolor: alpha("#ffffff", 0.03),
+                  }}
+                >
+                  <Typography variant="overline" color="text.secondary">
+                    Error details (development only)
+                  </Typography>
+                  <Typography
+                    component="pre"
+                    sx={{
+                      mt: 1.5,
+                      mb: 0,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      color: "error.main",
+                      fontSize: 12,
+                      fontFamily: '"IBM Plex Mono", monospace',
+                    }}
+                  >
+                    {error.toString()}
+                    {errorInfo?.componentStack}
+                  </Typography>
+                </Paper>
+              ) : null}
+
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                <Button
+                  onClick={this.handleReset}
+                  variant="contained"
+                  sx={{ flex: 1, borderRadius: 10 }}
+                >
+                  Return to Dashboard
+                </Button>
+                <Button
+                  onClick={() => window.location.reload()}
+                  variant="outlined"
+                  color="inherit"
+                  sx={{ borderRadius: 10 }}
+                >
+                  Reload
+                </Button>
+              </Stack>
+
+              <Typography
+                variant="caption"
+                sx={{
+                  textAlign: "center",
+                  color: "text.secondary",
+                  fontFamily: '"IBM Plex Mono", monospace',
                 }}
               >
-                {error.toString()}
-                {errorInfo?.componentStack}
-              </pre>
-            </details>
-          )}
-
-          {/* Actions */}
-          <div style={{ display: "flex", gap: "0.75rem" }}>
-            <button
-              onClick={this.handleReset}
-              style={{
-                flex:         1,
-                background:   "var(--accent)",
-                color:        "#000",
-                border:       "none",
-                borderRadius: "var(--radius-sm)",
-                padding:      "0.625rem 1rem",
-                fontSize:     "0.8125rem",
-                fontWeight:   600,
-                fontFamily:   "var(--font-display)",
-                cursor:       "pointer",
-                letterSpacing: "0.05em",
-              }}
-            >
-              Return to Dashboard
-            </button>
-            <button
-              onClick={() => window.location.reload()}
-              style={{
-                background:   "transparent",
-                color:        "var(--text-secondary)",
-                border:       "1px solid var(--border)",
-                borderRadius: "var(--radius-sm)",
-                padding:      "0.625rem 1rem",
-                fontSize:     "0.8125rem",
-                fontFamily:   "var(--font-display)",
-                cursor:       "pointer",
-              }}
-            >
-              Reload
-            </button>
-          </div>
-
-          {/* Footer */}
-          <p
-            style={{
-              marginTop:  "1.5rem",
-              fontSize:   "0.7rem",
-              color:      "var(--text-muted)",
-              fontFamily: "var(--font-display)",
-              textAlign:  "center",
-            }}
-          >
-            If this keeps happening, contact support with error code:{" "}
-            <span style={{ color: "var(--text-secondary)" }}>
-              {Date.now().toString(36).toUpperCase()}
-            </span>
-          </p>
-        </div>
-      </div>
+                If this keeps happening, contact support with error code: {errorCode}
+              </Typography>
+            </Stack>
+          </Paper>
+        </Container>
+      </Box>
     );
   }
 }

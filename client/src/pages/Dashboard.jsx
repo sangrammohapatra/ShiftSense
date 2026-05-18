@@ -8,169 +8,214 @@
  *   - Recent disputes table (last 5)
  */
 
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Grid,
+  Link as MuiLink,
+  List,
+  ListItemButton,
+  ListItemText,
+  Paper,
+  Skeleton,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
+} from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 import { useQuery } from "@tanstack/react-query";
 import {
-  BarChart,
   Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
+  BarChart,
   CartesianGrid,
   Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from "recharts";
 import {
-  Users,
-  CalendarDays,
   AlertTriangle,
-  TrendingDown,
-  RefreshCw,
   ArrowRight,
+  CalendarDays,
+  RefreshCw,
+  TrendingDown,
+  Users,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link as RouterLink } from "react-router-dom";
 
 import api from "@/api/axios";
 import Layout from "@/components/Layout";
 import useAuthStore from "@/store/authStore";
 
-// ─── API ──────────────────────────────────────────────────────────────────────
 const fetchStats = async () => {
-  const res = await api.get("/dashboard/stats");
-  return res.data.data;
+  const response = await api.get("/dashboard/stats");
+  return response.data.data;
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const fmtCurrency = (n) =>
+const formatCurrency = (value) =>
   new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
     maximumFractionDigits: 0,
-  }).format(n);
+  }).format(value);
 
-const fmtDate = (d) =>
-  new Date(d).toLocaleDateString("en-IN", {
+const formatDate = (value) =>
+  new Date(value).toLocaleDateString("en-IN", {
     day: "numeric",
     month: "short",
     year: "numeric",
   });
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
-const Skeleton = ({ w = "w-full", h = "h-4" }) => (
-  <div
-    className={`${w} ${h} rounded animate-pulse`}
-    style={{ background: "var(--bg-elevated)" }}
-  />
-);
+const statusToChipProps = (status) => {
+  const lookup = {
+    disputed: {
+      label: "Disputed",
+      sx: {
+        bgcolor: "rgba(248, 81, 73, 0.14)",
+        color: "#ff938b",
+      },
+    },
+    resolved: {
+      label: "Resolved",
+      sx: {
+        bgcolor: "rgba(63, 185, 80, 0.14)",
+        color: "#7ee787",
+      },
+    },
+    logged: {
+      label: "Logged",
+      sx: {
+        bgcolor: "rgba(88, 166, 255, 0.14)",
+        color: "#8cc2ff",
+      },
+    },
+  };
 
-// ─── Metric card ──────────────────────────────────────────────────────────────
-const MetricCard = ({ label, value, icon: Icon, accent = false, loading }) => (
-  <div
-    className="ss-card p-5 flex flex-col gap-3"
-    style={{
-      borderColor: accent ? "var(--accent)" : "var(--border)",
-      background: accent ? "rgba(240,165,0,0.04)" : "var(--bg-surface)",
-    }}
-  >
-    <div className="flex items-center justify-between">
-      <p
-        className="text-xs uppercase tracking-widest"
-        style={{
-          color: "var(--text-muted)",
-          fontFamily: "var(--font-display)",
-        }}
-      >
-        {label}
-      </p>
-      <div
-        className="w-7 h-7 flex items-center justify-center"
-        style={{
-          background: accent ? "var(--accent)" : "var(--bg-elevated)",
-          borderRadius: "var(--radius-sm)",
-        }}
-      >
-        <Icon
-          size={13}
-          style={{ color: accent ? "#000" : "var(--text-muted)" }}
-        />
-      </div>
-    </div>
+  return lookup[status] ?? lookup.logged;
+};
 
-    {loading ? (
-      <Skeleton h="h-8" w="w-24" />
-    ) : (
-      <p
-        className="text-3xl font-bold leading-none"
-        style={{
-          fontFamily: "var(--font-display)",
-          color: accent ? "var(--accent)" : "var(--text-primary)",
-        }}
-      >
-        {value}
-      </p>
-    )}
-  </div>
-);
+const MetricCard = ({
+  icon: Icon,
+  label,
+  value,
+  accent = false,
+  loading = false,
+}) => {
+  const theme = useTheme();
 
-// ─── Custom chart tooltip ─────────────────────────────────────────────────────
-const ChartTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
   return (
-    <div
-      className="px-3 py-2 text-xs"
-      style={{
-        background: "var(--bg-elevated)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius)",
-        fontFamily: "var(--font-display)",
-        color: "var(--text-primary)",
+    <Paper
+      sx={{
+        p: 3,
+        height: "100%",
+        borderRadius: 1,
+        background:
+          accent && !loading
+            ? `linear-gradient(180deg, ${alpha(
+                theme.palette.primary.main,
+                0.12,
+              )} 0%, ${alpha(theme.palette.background.paper, 0.96)} 100%)`
+            : theme.palette.background.paper,
+        borderColor: accent
+          ? alpha(theme.palette.primary.main, 0.28)
+          : "divider",
       }}
     >
-      <p className="font-bold mb-1" style={{ color: "var(--accent)" }}>
-        {label}
-      </p>
-      {payload.map((p) => (
-        <p key={p.name} style={{ color: p.color }}>
-          {p.name}: {p.value}
-        </p>
-      ))}
-    </div>
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        alignItems="flex-start"
+      >
+        <Box>
+          <Typography variant="overline" sx={{ color: "text.secondary" }}>
+            {label}
+          </Typography>
+          {loading ? (
+            <Skeleton
+              variant="rounded"
+              width={144}
+              height={40}
+              sx={{ mt: 1.5, borderRadius: 2 }}
+            />
+          ) : (
+            <Typography
+              variant="h4"
+              sx={{
+                mt: 1.5,
+                color: accent ? "primary.main" : "text.primary",
+              }}
+            >
+              {value}
+            </Typography>
+          )}
+        </Box>
+
+        <Box
+          sx={{
+            width: 46,
+            height: 46,
+            borderRadius: 1,
+            display: "grid",
+            placeItems: "center",
+            bgcolor: accent
+              ? alpha(theme.palette.primary.main, 0.18)
+              : alpha(theme.palette.common.white, 0.05),
+            color: accent ? "primary.main" : "text.secondary",
+          }}
+        >
+          <Icon size={18} />
+        </Box>
+      </Stack>
+    </Paper>
   );
 };
 
-// ─── Status badge ─────────────────────────────────────────────────────────────
-const StatusBadge = ({ status }) => {
-  const styles = {
-    disputed: {
-      bg: "rgba(248,81,73,0.12)",
-      color: "#f85149",
-      label: "Disputed",
-    },
-    resolved: {
-      bg: "rgba(63,185,80,0.12)",
-      color: "#3fb950",
-      label: "Resolved",
-    },
-    logged: { bg: "rgba(88,166,255,0.12)", color: "#58a6ff", label: "Logged" },
-  };
-  const s = styles[status] ?? styles.logged;
+const ChartTooltip = ({ active, payload, label }) => {
+  const theme = useTheme();
+
+  if (!active || !payload?.length) {
+    return null;
+  }
+
   return (
-    <span
-      className="text-xs font-bold px-2 py-0.5 uppercase tracking-wider"
-      style={{
-        background: s.bg,
-        color: s.color,
-        borderRadius: "var(--radius-sm)",
-        fontFamily: "var(--font-display)",
+    <Paper
+      sx={{
+        px: 1.75,
+        py: 1.25,
+        borderRadius: 1,
+        bgcolor: alpha(theme.palette.background.paper, 0.94),
+        borderColor: alpha(theme.palette.common.white, 0.1),
       }}
     >
-      {s.label}
-    </span>
+      <Typography variant="overline" sx={{ color: "primary.main" }}>
+        {label}
+      </Typography>
+      {payload.map((entry) => (
+        <Typography
+          key={entry.name}
+          variant="body2"
+          sx={{ color: entry.color, fontFamily: '"IBM Plex Mono", monospace' }}
+        >
+          {entry.name}: {entry.value}
+        </Typography>
+      ))}
+    </Paper>
   );
 };
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 const Dashboard = () => {
-  const employer = useAuthStore((s) => s.employer);
+  const theme = useTheme();
+  const employer = useAuthStore((state) => state.employer);
 
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ["dashboard-stats"],
@@ -179,398 +224,481 @@ const Dashboard = () => {
     refetchInterval: 5 * 60 * 1000,
   });
 
+  const quickLinks = [
+    {
+      to: "/workers",
+      label: "Manage Workers",
+      sublabel: "Link, review, or update workforce records.",
+    },
+    {
+      to: "/reports",
+      label: "Download Reports",
+      sublabel: "Generate monthly compliance and payroll exports.",
+    },
+    {
+      to: "/profile",
+      label: "Company Profile",
+      sublabel: "Maintain contact details and account settings.",
+    },
+  ];
+
   return (
     <Layout>
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
-        {/* ── Page header ──────────────────────────────────────────────────── */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h1
-              className="text-xl font-bold"
-              style={{
-                fontFamily: "var(--font-display)",
-                color: "var(--text-primary)",
-              }}
-            >
-              Dashboard
-            </h1>
-            <p
-              className="text-sm mt-0.5"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              {employer?.company_name ?? "—"} · Workforce Compliance Overview
-            </p>
-          </div>
-          <button
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="ss-btn-ghost flex items-center gap-2 text-xs"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
-            <RefreshCw size={12} className={isFetching ? "animate-spin" : ""} />
-            Refresh
-          </button>
-        </div>
-
-        {/* ── Error banner ─────────────────────────────────────────────────── */}
-        {isError && (
-          <div
-            className="px-4 py-3 text-sm flex items-center gap-2"
-            style={{
-              background: "rgba(248,81,73,0.1)",
-              border: "1px solid rgba(248,81,73,0.3)",
-              borderRadius: "var(--radius)",
-              color: "#f85149",
-            }}
-          >
-            <AlertTriangle size={14} />
-            {error?.message ?? "Failed to load stats."}
-          </div>
-        )}
-
-        {/* ── Metric cards ─────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <MetricCard
-            label="Total Workers"
-            value={data?.total_workers ?? 0}
-            icon={Users}
-            loading={isLoading}
-          />
-          <MetricCard
-            label="Shifts This Month"
-            value={data?.shifts_this_month ?? 0}
-            icon={CalendarDays}
-            loading={isLoading}
-          />
-          <MetricCard
-            label="Shortfall This Month"
-            value={
-              isLoading ? "—" : fmtCurrency(data?.shortfall_this_month ?? 0)
-            }
-            icon={TrendingDown}
-            accent={!isLoading && (data?.shortfall_this_month ?? 0) > 0}
-            loading={isLoading}
-          />
-          <MetricCard
-            label="Open Disputes"
-            value={data?.open_disputes ?? 0}
-            icon={AlertTriangle}
-            accent={!isLoading && (data?.open_disputes ?? 0) > 0}
-            loading={isLoading}
-          />
-        </div>
-
-        {/* ── Chart + quick links ───────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 ss-card p-5">
-            <p
-              className="text-xs uppercase tracking-widest font-medium mb-5"
-              style={{
-                color: "var(--text-secondary)",
-                fontFamily: "var(--font-display)",
-              }}
-            >
-              Shifts vs Disputes — Last 6 Months
-            </p>
-
-            {isLoading ? (
-              <div className="h-52 flex items-end gap-3 px-4">
-                {[40, 70, 55, 80, 60, 90].map((h, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 animate-pulse rounded-sm"
-                    style={{
-                      height: `${h}%`,
-                      background: "var(--bg-elevated)",
-                    }}
-                  />
-                ))}
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={210}>
-                <BarChart
-                  data={data?.monthly_chart ?? []}
-                  margin={{ top: 4, right: 8, left: -20, bottom: 0 }}
-                  barGap={3}
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="var(--border)"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="month"
-                    tick={{
-                      fill: "var(--text-muted)",
-                      fontSize: 10,
-                      fontFamily: "var(--font-display)",
-                    }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    tick={{
-                      fill: "var(--text-muted)",
-                      fontSize: 10,
-                      fontFamily: "var(--font-display)",
-                    }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    content={<ChartTooltip />}
-                    cursor={{ fill: "rgba(255,255,255,0.03)" }}
-                  />
-                  <Legend
-                    wrapperStyle={{
-                      fontSize: 10,
-                      fontFamily: "var(--font-display)",
-                      color: "var(--text-muted)",
-                      paddingTop: 8,
-                    }}
-                  />
-                  <Bar
-                    dataKey="shifts"
-                    name="Shifts"
-                    fill="var(--accent)"
-                    radius={[2, 2, 0, 0]}
-                    maxBarSize={28}
-                  />
-                  <Bar
-                    dataKey="disputes"
-                    name="Disputes"
-                    fill="#f85149"
-                    radius={[2, 2, 0, 0]}
-                    maxBarSize={28}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-
-          <div className="ss-card p-5 flex flex-col gap-3">
-            <p
-              className="text-xs uppercase tracking-widest font-medium mb-2"
-              style={{
-                color: "var(--text-secondary)",
-                fontFamily: "var(--font-display)",
-              }}
-            >
-              Quick Access
-            </p>
-            {[
-              {
-                to: "/workers",
-                label: "Manage Workers",
-                sub: "Link or unlink workers",
-              },
-              {
-                to: "/reports",
-                label: "Download Reports",
-                sub: "Monthly payroll sheets",
-              },
-              {
-                to: "/profile",
-                label: "Company Profile",
-                sub: "Edit account settings",
-              },
-            ].map(({ to, label, sub }) => (
-              <Link
-                key={to}
-                to={to}
-                className="flex items-center justify-between px-3 py-3 transition-all duration-150"
-                style={{
-                  background: "var(--bg-elevated)",
-                  borderRadius: "var(--radius)",
-                  textDecoration: "none",
-                  borderLeft: "2px solid transparent",
-                }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.borderLeft = "2px solid var(--accent)")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.borderLeft = "2px solid transparent")
-                }
-              >
-                <div>
-                  <p
-                    className="text-sm font-medium"
-                    style={{
-                      color: "var(--text-primary)",
-                      fontFamily: "var(--font-display)",
-                    }}
-                  >
-                    {label}
-                  </p>
-                  <p
-                    className="text-xs mt-0.5"
-                    style={{ color: "var(--text-muted)" }}
-                  >
-                    {sub}
-                  </p>
-                </div>
-                <ArrowRight
-                  size={14}
-                  style={{ color: "var(--text-muted)", flexShrink: 0 }}
-                />
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Recent disputes table ─────────────────────────────────────────── */}
-        <div className="ss-card overflow-hidden">
-          <div
-            className="flex items-center justify-between px-5 py-4"
-            style={{ borderBottom: "1px solid var(--border)" }}
-          >
-            <p
-              className="text-xs uppercase tracking-widest font-medium"
-              style={{
-                color: "var(--text-secondary)",
-                fontFamily: "var(--font-display)",
-              }}
-            >
-              Recent Disputes
-            </p>
-            <Link
-              to="/workers"
-              className="text-xs flex items-center gap-1"
-              style={{
-                color: "var(--accent)",
-                fontFamily: "var(--font-display)",
-                textDecoration: "none",
-              }}
-            >
-              View all <ArrowRight size={11} />
-            </Link>
-          </div>
-
-          {isLoading ? (
-            <div className="p-5 space-y-3">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="flex gap-4">
-                  <Skeleton w="w-32" />
-                  <Skeleton w="w-24" />
-                  <Skeleton w="w-20" />
-                </div>
-              ))}
-            </div>
-          ) : !data?.recent_disputes?.length ? (
-            <div className="py-10 text-center">
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                No disputes found. Wages are compliant! ✅
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                    {[
-                      "Worker",
-                      "Date",
-                      "Occupation",
-                      "Shortfall",
-                      "Status",
-                    ].map((h) => (
-                      <th
-                        key={h}
-                        className="px-5 py-3 text-left text-xs uppercase tracking-widest font-medium"
-                        style={{
-                          color: "var(--text-muted)",
-                          fontFamily: "var(--font-display)",
-                        }}
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.recent_disputes.map((d, i) => (
-                    <tr
-                      key={d.shift_id}
-                      style={{
-                        borderBottom:
-                          i < data.recent_disputes.length - 1
-                            ? "1px solid var(--border)"
-                            : "none",
-                      }}
-                    >
-                      <td className="px-5 py-3">
-                        <Link
-                          to={`/workers/${d.worker.id}`}
-                          style={{
-                            color: "var(--text-primary)",
-                            fontWeight: 500,
-                            textDecoration: "none",
-                            fontFamily: "var(--font-display)",
-                          }}
-                          onMouseEnter={(e) =>
-                            (e.currentTarget.style.color = "var(--accent)")
-                          }
-                          onMouseLeave={(e) =>
-                            (e.currentTarget.style.color =
-                              "var(--text-primary)")
-                          }
-                        >
-                          {d.worker.name}
-                        </Link>
-                        <p
-                          className="text-xs mt-0.5"
-                          style={{ color: "var(--text-muted)" }}
-                        >
-                          {d.worker.state}
-                        </p>
-                      </td>
-                      <td
-                        className="px-5 py-3 text-xs"
-                        style={{
-                          color: "var(--text-secondary)",
-                          fontFamily: "var(--font-display)",
-                        }}
-                      >
-                        {fmtDate(d.shift_date)}
-                      </td>
-                      <td
-                        className="px-5 py-3 text-xs capitalize"
-                        style={{ color: "var(--text-secondary)" }}
-                      >
-                        {d.worker.occupation}
-                      </td>
-                      <td
-                        className="px-5 py-3 text-sm font-bold"
-                        style={{
-                          color: "#f85149",
-                          fontFamily: "var(--font-display)",
-                        }}
-                      >
-                        {fmtCurrency(d.shortfall)}
-                      </td>
-                      <td className="px-5 py-3">
-                        <StatusBadge status={d.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        <p
-          className="text-center text-xs pb-4"
-          style={{
-            color: "var(--text-muted)",
-            fontFamily: "var(--font-display)",
+      <Box
+        sx={{
+          maxWidth: 1440,
+          mx: "auto",
+          px: { xs: 2, sm: 3, lg: 4 },
+          pt: { xs: 3, md: 4 },
+        }}
+      >
+        <Paper
+          sx={{
+            mb: 3,
+            p: { xs: 3, md: 4 },
+            borderRadius: 1,
+            background: `linear-gradient(135deg, ${alpha(
+              theme.palette.primary.main,
+              0.16,
+            )} 0%, ${alpha(theme.palette.info.main, 0.12)} 42%, ${alpha(
+              theme.palette.background.paper,
+              0.96,
+            )} 100%)`,
           }}
         >
-          Data governed by Minimum Wages Act 1948 · Factories Act 1948 · Payment
-          of Wages Act 1936
-        </p>
-      </div>
+          <Stack
+            direction={{ xs: "column", md: "row" }}
+            spacing={2}
+            justifyContent="space-between"
+            alignItems={{ xs: "flex-start", md: "center" }}
+          >
+            <Box sx={{ maxWidth: 760 }}>
+              <Typography variant="overline" sx={{ color: "primary.main" }}>
+                Workforce Compliance Overview
+              </Typography>
+              <Typography variant="h3" sx={{ mt: 0.75 }}>
+                Dashboard
+              </Typography>
+              <Typography
+                variant="body1"
+                sx={{ mt: 1.25, color: "text.secondary" }}
+              >
+                {employer?.company_name ?? "Your company"} has a live view of
+                wage risk, dispute activity, and reporting readiness across the
+                last six months.
+              </Typography>
+            </Box>
+
+            <Button
+              onClick={() => refetch()}
+              disabled={isFetching}
+              variant="contained"
+              color="primary"
+              startIcon={
+                isFetching ? (
+                  <CircularProgress size={14} color="inherit" />
+                ) : (
+                  <RefreshCw size={16} />
+                )
+              }
+              sx={{ minWidth: 164, borderRadius: 10, px: 2.5, py: 1.25 }}
+            >
+              {isFetching ? "Refreshing" : "Refresh data"}
+            </Button>
+          </Stack>
+        </Paper>
+
+        {isError ? (
+          <Alert
+            severity="error"
+            icon={<AlertTriangle size={18} />}
+            sx={{
+              mb: 3,
+              borderRadius: 1,
+              bgcolor: "rgba(248, 81, 73, 0.12)",
+              color: "text.primary",
+              "& .MuiAlert-icon": {
+                color: "error.main",
+              },
+            }}
+          >
+            {error?.message ?? "Failed to load dashboard statistics."}
+          </Alert>
+        ) : null}
+
+        <Grid container spacing={3}>
+          <Grid item xs={12} sm={6} lg={3}>
+            <MetricCard
+              label="Total Workers"
+              value={data?.total_workers ?? 0}
+              icon={Users}
+              loading={isLoading}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} lg={3}>
+            <MetricCard
+              label="Shifts This Month"
+              value={data?.shifts_this_month ?? 0}
+              icon={CalendarDays}
+              loading={isLoading}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} lg={3}>
+            <MetricCard
+              label="Shortfall This Month"
+              value={formatCurrency(data?.shortfall_this_month ?? 0)}
+              icon={TrendingDown}
+              accent={!isLoading && (data?.shortfall_this_month ?? 0) > 0}
+              loading={isLoading}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} lg={3}>
+            <MetricCard
+              label="Open Disputes"
+              value={data?.open_disputes ?? 0}
+              icon={AlertTriangle}
+              accent={!isLoading && (data?.open_disputes ?? 0) > 0}
+              loading={isLoading}
+            />
+          </Grid>
+
+          <Grid item xs={12} xl={8}>
+            <Paper
+              sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 1, height: "100%" }}
+            >
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={1.5}
+                justifyContent="space-between"
+                alignItems={{ xs: "flex-start", sm: "center" }}
+                sx={{ mb: 3 }}
+              >
+                <Box>
+                  <Typography
+                    variant="overline"
+                    sx={{ color: "text.secondary" }}
+                  >
+                    Operational Trends
+                  </Typography>
+                  <Typography variant="h5" sx={{ mt: 0.5 }}>
+                    Shifts vs disputes
+                  </Typography>
+                </Box>
+                <Chip
+                  label="Last 6 months"
+                  variant="outlined"
+                  sx={{
+                    borderRadius: 10,
+                    borderColor: alpha(theme.palette.primary.main, 0.3),
+                    color: "primary.main",
+                  }}
+                />
+              </Stack>
+
+              {isLoading ? (
+                <Stack
+                  direction="row"
+                  spacing={1.5}
+                  alignItems="flex-end"
+                  sx={{ height: 280, pt: 4 }}
+                >
+                  {[42, 68, 54, 86, 61, 96].map((height, index) => (
+                    <Skeleton
+                      key={index}
+                      variant="rounded"
+                      width="100%"
+                      height={`${height}%`}
+                      sx={{ flex: 1, borderRadius: 1, transform: "none" }}
+                    />
+                  ))}
+                </Stack>
+              ) : (
+                <Box sx={{ height: 300 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={data?.monthly_chart ?? []}
+                      margin={{ top: 8, right: 8, left: -20, bottom: 0 }}
+                      barGap={8}
+                    >
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke={alpha(theme.palette.common.white, 0.08)}
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="month"
+                        tick={{
+                          fill: theme.palette.text.secondary,
+                          fontSize: 11,
+                          fontFamily: "IBM Plex Mono, monospace",
+                        }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        allowDecimals={false}
+                        tick={{
+                          fill: theme.palette.text.secondary,
+                          fontSize: 11,
+                          fontFamily: "IBM Plex Mono, monospace",
+                        }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip
+                        content={<ChartTooltip />}
+                        cursor={{
+                          fill: alpha(theme.palette.primary.main, 0.08),
+                        }}
+                      />
+                      <Legend
+                        wrapperStyle={{
+                          fontFamily: "IBM Plex Mono, monospace",
+                          fontSize: 11,
+                          paddingTop: 12,
+                          color: theme.palette.text.secondary,
+                        }}
+                      />
+                      <Bar
+                        dataKey="shifts"
+                        name="Shifts"
+                        fill={theme.palette.primary.main}
+                        radius={[10, 10, 0, 0]}
+                        maxBarSize={32}
+                      />
+                      <Bar
+                        dataKey="disputes"
+                        name="Disputes"
+                        fill={theme.palette.error.main}
+                        radius={[10, 10, 0, 0]}
+                        maxBarSize={32}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Box>
+              )}
+            </Paper>
+          </Grid>
+
+          <Grid item xs={12} xl={4}>
+            <Paper
+              sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 1, height: "100%" }}
+            >
+              <Typography variant="overline" sx={{ color: "text.secondary" }}>
+                Quick Access
+              </Typography>
+              <Typography variant="h5" sx={{ mt: 0.5, mb: 2 }}>
+                Common actions
+              </Typography>
+              <List sx={{ p: 0 }}>
+                {quickLinks.map((item) => (
+                  <ListItemButton
+                    key={item.to}
+                    component={RouterLink}
+                    to={item.to}
+                    sx={{
+                      px: 2,
+                      py: 1.75,
+                      mb: 1.25,
+                      border: `1px solid ${alpha(theme.palette.common.white, 0.08)}`,
+                      bgcolor: alpha(theme.palette.common.white, 0.02),
+                    }}
+                  >
+                    <ListItemText
+                      primary={item.label}
+                      secondary={item.sublabel}
+                      primaryTypographyProps={{
+                        fontWeight: 700,
+                        fontFamily: '"IBM Plex Mono", monospace',
+                      }}
+                      secondaryTypographyProps={{
+                        sx: { mt: 0.5, color: "text.secondary" },
+                      }}
+                    />
+                    <ArrowRight size={16} />
+                  </ListItemButton>
+                ))}
+              </List>
+            </Paper>
+          </Grid>
+
+          <Grid item xs={12}>
+            <TableContainer
+              component={Paper}
+              sx={{ borderRadius: 1, overflow: "hidden" }}
+            >
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={1}
+                justifyContent="space-between"
+                alignItems={{ xs: "flex-start", sm: "center" }}
+                sx={{ px: 3, py: 2.5 }}
+              >
+                <Box>
+                  <Typography
+                    variant="overline"
+                    sx={{ color: "text.secondary" }}
+                  >
+                    Recent Disputes
+                  </Typography>
+                  <Typography variant="h5" sx={{ mt: 0.5 }}>
+                    Latest flagged shifts
+                  </Typography>
+                </Box>
+                <MuiLink
+                  component={RouterLink}
+                  to="/workers"
+                  underline="none"
+                  sx={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 0.75,
+                    color: "primary.main",
+                    fontFamily: '"IBM Plex Mono", monospace',
+                    fontWeight: 600,
+                  }}
+                >
+                  View all workers
+                  <ArrowRight size={14} />
+                </MuiLink>
+              </Stack>
+
+              {isLoading ? (
+                <Box sx={{ px: 3, pb: 3 }}>
+                  {[0, 1, 2].map((row) => (
+                    <Stack
+                      key={row}
+                      direction="row"
+                      spacing={2}
+                      sx={{ py: 1.5 }}
+                    >
+                      <Skeleton variant="rounded" width="26%" height={44} />
+                      <Skeleton variant="rounded" width="16%" height={44} />
+                      <Skeleton variant="rounded" width="18%" height={44} />
+                      <Skeleton variant="rounded" width="16%" height={44} />
+                      <Skeleton variant="rounded" width="14%" height={44} />
+                    </Stack>
+                  ))}
+                </Box>
+              ) : !data?.recent_disputes?.length ? (
+                <Box sx={{ px: 3, pb: 4 }}>
+                  <Alert
+                    severity="success"
+                    sx={{
+                      borderRadius: 1,
+                      bgcolor: alpha(theme.palette.success.main, 0.1),
+                      color: "text.primary",
+                      "& .MuiAlert-icon": { color: "success.main" },
+                    }}
+                  >
+                    No disputes found. Wage records look compliant right now.
+                  </Alert>
+                </Box>
+              ) : (
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Worker</TableCell>
+                      <TableCell>Date</TableCell>
+                      <TableCell>Occupation</TableCell>
+                      <TableCell>Shortfall</TableCell>
+                      <TableCell>Status</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {data.recent_disputes.map((dispute) => {
+                      const chipProps = statusToChipProps(dispute.status);
+
+                      return (
+                        <TableRow
+                          key={dispute.shift_id}
+                          hover
+                          sx={{
+                            "& .MuiTableCell-root": {
+                              borderColor: alpha(
+                                theme.palette.common.white,
+                                0.06,
+                              ),
+                            },
+                          }}
+                        >
+                          <TableCell>
+                            <MuiLink
+                              component={RouterLink}
+                              to={`/workers/${dispute.worker.id}`}
+                              underline="none"
+                              sx={{
+                                color: "text.primary",
+                                fontWeight: 700,
+                                fontFamily: '"IBM Plex Mono", monospace',
+                                "&:hover": {
+                                  color: "primary.main",
+                                },
+                              }}
+                            >
+                              {dispute.worker.name}
+                            </MuiLink>
+                            <Typography
+                              variant="body2"
+                              sx={{ color: "text.secondary", mt: 0.5 }}
+                            >
+                              {dispute.worker.state}
+                            </Typography>
+                          </TableCell>
+                          <TableCell sx={{ color: "text.secondary" }}>
+                            {formatDate(dispute.shift_date)}
+                          </TableCell>
+                          <TableCell
+                            sx={{
+                              color: "text.secondary",
+                              textTransform: "capitalize",
+                            }}
+                          >
+                            {dispute.worker.occupation}
+                          </TableCell>
+                          <TableCell
+                            sx={{
+                              color: "error.main",
+                              fontWeight: 700,
+                              fontFamily: '"IBM Plex Mono", monospace',
+                            }}
+                          >
+                            {formatCurrency(dispute.shortfall)}
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              size="small"
+                              label={chipProps.label}
+                              sx={{
+                                borderRadius: 10,
+                                ...chipProps.sx,
+                              }}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </TableContainer>
+          </Grid>
+        </Grid>
+
+        <Typography
+          variant="caption"
+          sx={{
+            display: "block",
+            textAlign: "center",
+            mt: 3,
+            color: "text.secondary",
+            pb: 1,
+          }}
+        >
+          Data governed by Minimum Wages Act 1948, Factories Act 1948, and the
+          Payment of Wages Act 1936.
+        </Typography>
+      </Box>
     </Layout>
   );
 };

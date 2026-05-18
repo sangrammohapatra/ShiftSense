@@ -12,45 +12,80 @@
  *   - Logout button at bottom
  */
 
-import { useState }               from "react";
-import { NavLink, useNavigate }   from "react-router-dom";
+import { useState } from "react";
 import {
-  LayoutDashboard, Users, FileBarChart2,
-  User, LogOut, Menu, X, ShieldCheck,
+  AppBar,
+  Avatar,
+  Box,
+  Button,
+  Chip,
+  Divider,
+  Drawer,
+  IconButton,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Paper,
+  Stack,
+  Toolbar,
+  Tooltip,
+  Typography,
+  useMediaQuery,
+} from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import {
   ChevronRight,
-}                                 from "lucide-react";
+  FileBarChart2,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  ShieldCheck,
+  User,
+  Users,
+  X,
+} from "lucide-react";
 
 import useAuthStore from "@/store/authStore";
 
-// ─── Nav items ─────────────────────────────────────────────────────────────────
+const DRAWER_WIDTH = 280;
+
 const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
-  { to: "/workers",   label: "Workers",   Icon: Users },
-  { to: "/reports",   label: "Reports",   Icon: FileBarChart2 },
-  { to: "/profile",   label: "Profile",   Icon: User },
+  { to: "/workers", label: "Workers", Icon: Users },
+  { to: "/reports", label: "Reports", Icon: FileBarChart2 },
+  { to: "/profile", label: "Profile", Icon: User },
 ];
 
-// ─── Plan badge ────────────────────────────────────────────────────────────────
-const PlanBadge = ({ plan }) => (
-  <span
-    className="text-xs font-bold tracking-widest px-2 py-0.5 uppercase"
-    style={{
-      fontFamily:   "var(--font-display)",
-      background:   plan === "pro" ? "var(--accent)" : "var(--bg-elevated)",
-      color:        plan === "pro" ? "#000"          : "var(--text-muted)",
-      border:       plan === "pro" ? "none"          : "1px solid var(--border)",
-      borderRadius: "var(--radius-sm)",
-    }}
-  >
-    {plan === "pro" ? "● PRO" : "FREE"}
-  </span>
-);
+const isSelectedPath = (pathname, to) =>
+  pathname === to || pathname.startsWith(`${to}/`);
 
-// ─── Sidebar content (shared between desktop + mobile overlay) ─────────────────
-const SidebarContent = ({ onNavClick }) => {
-  const navigate  = useNavigate();
-  const employer  = useAuthStore((s) => s.employer);
-  const logout    = useAuthStore((s) => s.logout);
+const PlanBadge = ({ plan }) => {
+  const theme = useTheme();
+  const isPro = String(plan).toLowerCase() === "pro";
+
+  return (
+    <Chip
+      size="small"
+      label={isPro ? "PRO" : "FREE"}
+      color={isPro ? "primary" : "default"}
+      sx={{
+        borderRadius: 10,
+        bgcolor: isPro ? theme.palette.primary.main : alpha("#fff", 0.04),
+        color: isPro ? theme.palette.primary.contrastText : "text.secondary",
+        border: isPro ? "none" : `1px solid ${theme.palette.divider}`,
+      }}
+    />
+  );
+};
+
+const SidebarContent = ({ onClose }) => {
+  const theme = useTheme();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const employer = useAuthStore((state) => state.employer);
+  const logout = useAuthStore((state) => state.logout);
 
   const handleLogout = () => {
     logout();
@@ -58,226 +93,280 @@ const SidebarContent = ({ onNavClick }) => {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* ── Wordmark ─────────────────────────────────────────────────────── */}
-      <div
-        className="px-5 pt-6 pb-5"
-        style={{ borderBottom: "1px solid var(--border)" }}
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        p: 2,
+      }}
+    >
+      <Stack
+        direction="row"
+        alignItems="flex-start"
+        justifyContent="space-between"
+        sx={{ px: 1, pt: 1, pb: 2 }}
       >
-        <div
-          className="text-lg font-bold tracking-[0.18em] uppercase"
-          style={{ fontFamily: "var(--font-display)", color: "var(--accent)" }}
+        <Box>
+          {/* <Typography variant="overline" sx={{ color: "primary.main" }}>
+            ShiftSense
+          </Typography>
+          <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
+            Wage Intelligence
+          </Typography> */}
+          <img
+            src="./shiftsense.png"
+            alt="ShiftSense Logo"
+            style={{ width: 62, height: 62, marginBottom: 4 }}
+          />
+        </Box>
+        <IconButton
+          onClick={onClose}
+          sx={{ display: { lg: "none" }, color: "text.secondary" }}
         >
-          ShiftSense
-        </div>
-        <div
-          className="text-xs tracking-widest mt-0.5 uppercase"
-          style={{ color: "var(--text-muted)", fontFamily: "var(--font-display)" }}
-        >
-          Wage Intelligence
-        </div>
-      </div>
+          <X size={18} />
+        </IconButton>
+      </Stack>
 
-      {/* ── Employer identity strip ──────────────────────────────────────── */}
       {employer && (
-        <div
-          className="px-5 py-4 flex items-start gap-3"
-          style={{ borderBottom: "1px solid var(--border)" }}
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 2,
+            mb: 2,
+            borderRadius: 1,
+            bgcolor: alpha(theme.palette.primary.main, 0.06),
+            borderColor: alpha(theme.palette.primary.main, 0.18),
+          }}
         >
-          {/* Avatar initials */}
-          <div
-            className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-xs font-bold"
-            style={{
-              background:   "var(--accent)",
-              color:        "#000",
-              fontFamily:   "var(--font-display)",
-              borderRadius: "var(--radius-sm)",
-            }}
-          >
-            {(employer.company_name ?? "?")[0].toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <p
-              className="text-sm font-semibold truncate leading-tight"
-              style={{ color: "var(--text-primary)", fontFamily: "var(--font-display)" }}
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Avatar
+              sx={{
+                width: 44,
+                height: 44,
+                bgcolor: "primary.main",
+                color: "primary.contrastText",
+                fontFamily: '"IBM Plex Mono", monospace',
+                fontWeight: 700,
+              }}
             >
-              {employer.company_name}
-            </p>
-            <div className="mt-1">
-              <PlanBadge plan={employer.plan} />
-            </div>
-          </div>
-        </div>
+              {(employer.company_name ?? "?").charAt(0).toUpperCase()}
+            </Avatar>
+            <Box sx={{ minWidth: 0 }}>
+              <Tooltip title={employer.company_name} placement="top">
+                <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
+                  {employer.company_name}
+                </Typography>
+              </Tooltip>
+              <Stack
+                direction="row"
+                spacing={1}
+                alignItems="center"
+                sx={{ mt: 0.75 }}
+              >
+                <PlanBadge plan={employer.plan} />
+                <Typography variant="caption">Employer Console</Typography>
+              </Stack>
+            </Box>
+          </Stack>
+        </Paper>
       )}
 
-      {/* ── Nav links ────────────────────────────────────────────────────── */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {NAV_ITEMS.map(({ to, label, Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            onClick={onNavClick}
-            className={({ isActive }) =>
-              [
-                "group flex items-center gap-3 px-3 py-2.5 text-sm transition-all duration-150",
-                isActive
-                  ? "font-semibold"
-                  : "font-normal",
-              ].join(" ")
-            }
-            style={({ isActive }) => ({
-              fontFamily:   "var(--font-display)",
-              background:   isActive ? "var(--accent-glow)" : "transparent",
-              color:        isActive ? "var(--accent)"      : "var(--text-secondary)",
-              borderRadius: "var(--radius)",
-              borderLeft:   isActive ? "2px solid var(--accent)" : "2px solid transparent",
-            })}
-          >
-            {({ isActive }) => (
-              <>
-                <Icon
-                  size={15}
-                  style={{ color: isActive ? "var(--accent)" : "var(--text-muted)" }}
-                />
-                <span className="flex-1">{label}</span>
-                {isActive && (
-                  <ChevronRight size={12} style={{ color: "var(--accent)" }} />
-                )}
-              </>
-            )}
-          </NavLink>
-        ))}
-      </nav>
+      <List sx={{ px: 0, flexGrow: 1 }}>
+        {NAV_ITEMS.map(({ to, label, Icon }) => {
+          const selected = isSelectedPath(location.pathname, to);
 
-      {/* ── Compliance badge ─────────────────────────────────────────────── */}
-      <div
-        className="mx-3 mb-3 px-3 py-2.5 flex items-center gap-2"
-        style={{
-          background:   "rgba(240,165,0,0.06)",
-          border:       "1px solid rgba(240,165,0,0.2)",
-          borderRadius: "var(--radius)",
+          return (
+            <ListItemButton
+              key={to}
+              component={NavLink}
+              to={to}
+              selected={selected}
+              onClick={onClose}
+              sx={{
+                px: 1.5,
+                py: 1.25,
+                color: selected ? "primary.main" : "text.secondary",
+              }}
+            >
+              <ListItemIcon
+                sx={{
+                  minWidth: 36,
+                  color: selected ? "primary.main" : "text.secondary",
+                }}
+              >
+                <Icon size={18} />
+              </ListItemIcon>
+              <ListItemText
+                primary={label}
+                primaryTypographyProps={{
+                  fontFamily: '"IBM Plex Mono", monospace',
+                  fontSize: 14,
+                  fontWeight: selected ? 700 : 500,
+                }}
+              />
+              {selected ? <ChevronRight size={16} /> : null}
+            </ListItemButton>
+          );
+        })}
+      </List>
+
+      <Paper
+        variant="outlined"
+        sx={{
+          p: 1.75,
+          mb: 2,
+          borderRadius: 1,
+          bgcolor: alpha(theme.palette.success.main, 0.07),
+          borderColor: alpha(theme.palette.success.main, 0.18),
         }}
       >
-        <ShieldCheck size={13} style={{ color: "var(--accent)", flexShrink: 0 }} />
-        <p
-          className="text-xs leading-tight"
-          style={{ color: "var(--text-muted)", fontFamily: "var(--font-display)" }}
-        >
-          Minimum Wages Act 1948
-          <br />compliant
-        </p>
-      </div>
+        <Stack direction="row" spacing={1.25} alignItems="center">
+          <ShieldCheck size={18} color={theme.palette.success.main} />
+          <Box>
+            <Typography
+              variant="overline"
+              sx={{ color: "success.main", display: "block", lineHeight: 1.2 }}
+            >
+              Compliance Ready
+            </Typography>
+            <Typography variant="caption">
+              Minimum Wages Act workflows are active for this workspace.
+            </Typography>
+          </Box>
+        </Stack>
+      </Paper>
 
-      {/* ── Logout ───────────────────────────────────────────────────────── */}
-      <div className="px-3 pb-5" style={{ borderTop: "1px solid var(--border)" }}>
-        <button
-          onClick={handleLogout}
-          className="mt-3 w-full flex items-center gap-3 px-3 py-2.5 text-sm transition-all duration-150"
-          style={{
-            fontFamily:   "var(--font-display)",
-            color:        "var(--text-muted)",
-            borderRadius: "var(--radius)",
-            background:   "transparent",
-            border:       "none",
-            cursor:       "pointer",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color      = "#f85149";
-            e.currentTarget.style.background = "rgba(248,81,73,0.08)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color      = "var(--text-muted)";
-            e.currentTarget.style.background = "transparent";
-          }}
-        >
-          <LogOut size={15} />
-          <span>Log Out</span>
-        </button>
-      </div>
-    </div>
+      <Divider sx={{ borderColor: "divider", mb: 2 }} />
+
+      <Button
+        onClick={handleLogout}
+        variant="outlined"
+        color="error"
+        startIcon={<LogOut size={16} />}
+        sx={{
+          justifyContent: "flex-start",
+          borderRadius: 1,
+          py: 1.2,
+        }}
+      >
+        Log Out
+      </Button>
+    </Box>
   );
 };
 
-// ─── Layout ────────────────────────────────────────────────────────────────────
 const Layout = ({ children }) => {
+  const theme = useTheme();
+  const isDesktop = useMediaQuery(theme.breakpoints.up("lg"));
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const handleClose = () => {
+    if (!isDesktop) {
+      setMobileOpen(false);
+    }
+  };
+
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg-base)" }}>
-
-      {/* ── Desktop sidebar ──────────────────────────────────────────────── */}
-      <aside
-        className="hidden lg:flex flex-col w-60 flex-shrink-0 h-full overflow-hidden"
-        style={{
-          background:  "var(--bg-surface)",
-          borderRight: "1px solid var(--border)",
-        }}
+    <Box
+      sx={{
+        display: "flex",
+        minHeight: "100vh",
+        bgcolor: "background.default",
+      }}
+    >
+      <Box
+        component="nav"
+        sx={{ width: { lg: DRAWER_WIDTH }, flexShrink: { lg: 0 } }}
       >
-        <SidebarContent onNavClick={undefined} />
-      </aside>
-
-      {/* ── Mobile overlay backdrop ──────────────────────────────────────── */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 z-40 lg:hidden"
-          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)" }}
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-
-      {/* ── Mobile sidebar drawer ────────────────────────────────────────── */}
-      <aside
-        className="fixed left-0 top-0 z-50 h-full w-72 flex flex-col lg:hidden transition-transform duration-300"
-        style={{
-          background:   "var(--bg-surface)",
-          borderRight:  "1px solid var(--border)",
-          transform:    mobileOpen ? "translateX(0)" : "translateX(-100%)",
-          boxShadow:    mobileOpen ? "4px 0 40px rgba(0,0,0,0.5)" : "none",
-        }}
-      >
-        {/* Close button */}
-        <button
-          onClick={() => setMobileOpen(false)}
-          className="absolute top-4 right-4 p-1.5 rounded"
-          style={{ color: "var(--text-muted)", background: "var(--bg-elevated)", border: "none", cursor: "pointer" }}
-        >
-          <X size={16} />
-        </button>
-        <SidebarContent onNavClick={() => setMobileOpen(false)} />
-      </aside>
-
-      {/* ── Main content area ────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-
-        {/* Mobile top bar */}
-        <header
-          className="lg:hidden flex items-center gap-3 px-4 py-3 flex-shrink-0"
-          style={{
-            background:   "var(--bg-surface)",
-            borderBottom: "1px solid var(--border)",
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={handleClose}
+          ModalProps={{ keepMounted: true }}
+          sx={{
+            display: { xs: "block", lg: "none" },
+            "& .MuiDrawer-paper": {
+              width: DRAWER_WIDTH,
+            },
           }}
         >
-          <button
-            onClick={() => setMobileOpen(true)}
-            className="p-2 rounded"
-            style={{ color: "var(--text-secondary)", background: "var(--bg-elevated)", border: "none", cursor: "pointer" }}
-          >
-            <Menu size={18} />
-          </button>
-          <span
-            className="text-sm font-bold tracking-widest uppercase"
-            style={{ fontFamily: "var(--font-display)", color: "var(--accent)" }}
-          >
-            ShiftSense
-          </span>
-        </header>
+          <SidebarContent onClose={handleClose} />
+        </Drawer>
 
-        {/* Scrollable page content */}
-        <main className="flex-1 overflow-y-auto" style={{ padding: "0" }}>
+        <Drawer
+          variant="permanent"
+          open
+          sx={{
+            display: { xs: "none", lg: "block" },
+            "& .MuiDrawer-paper": {
+              width: DRAWER_WIDTH,
+              boxSizing: "border-box",
+            },
+          }}
+        >
+          <SidebarContent />
+        </Drawer>
+      </Box>
+
+      <Box
+        sx={{
+          flexGrow: 1,
+          minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
+          minHeight: "100vh",
+        }}
+      >
+        <AppBar
+          position="sticky"
+          color="transparent"
+          elevation={0}
+          sx={{
+            display: { xs: "block", lg: "none" },
+            borderBottom: `1px solid ${theme.palette.divider}`,
+            backdropFilter: "blur(18px)",
+            bgcolor: alpha(theme.palette.background.paper, 0.86),
+          }}
+        >
+          <Toolbar sx={{ minHeight: 72, px: 2 }}>
+            <IconButton
+              onClick={() => setMobileOpen(true)}
+              color="inherit"
+              edge="start"
+              sx={{
+                mr: 1.5,
+                bgcolor: alpha(theme.palette.common.white, 0.04),
+              }}
+            >
+              <Menu size={18} />
+            </IconButton>
+            <Box>
+              <Typography variant="overline" sx={{ color: "primary.main" }}>
+                ShiftSense
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{ color: "text.secondary", lineHeight: 1.2 }}
+              >
+                Employer workspace
+              </Typography>
+            </Box>
+          </Toolbar>
+        </AppBar>
+
+        <Box
+          component="main"
+          sx={{
+            flexGrow: 1,
+            minWidth: 0,
+            pb: 4,
+          }}
+        >
           {children}
-        </main>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   );
 };
 

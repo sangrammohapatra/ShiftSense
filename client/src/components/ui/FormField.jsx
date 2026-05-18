@@ -16,6 +16,7 @@
  *   className  {string}   — extra classes on the input
  */
 
+import { InputAdornment, TextField, Typography } from "@mui/material";
 const FormField = ({
   label,
   id,
@@ -23,31 +24,75 @@ const FormField = ({
   error,
   type = "text",
   placeholder,
-  children,
   disabled,
-  className = "",
-}) => (
-  <div>
-    <label htmlFor={id} className="ss-label">
-      {label}
-    </label>
-    <div className="relative">
-      <input
+  endAdornment,
+  helperText,
+  select = false,
+  children,
+  sx,
+  textFieldProps,
+  inputProps,
+  multiline = false,
+  rows,
+}) => {
+  const { ref, ...fieldProps } = reg ?? {};
+
+  return (
+    <>
+      <Typography
+        variant="overline"
+        htmlFor={id}
+        sx={{
+          display: "block",
+          fontFamily: '"IBM Plex Mono", monospace',
+        }}
+      >
+        {label}
+      </Typography>
+      <TextField
         id={id}
         type={type}
         placeholder={placeholder}
         disabled={disabled}
-        className={`ss-input ${error ? "error" : ""} ${children ? "pr-10" : ""} ${className}`}
-        {...reg}
-      />
-      {children && (
-        <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-          {children}
-        </div>
-      )}
-    </div>
-    {error && <p className="ss-field-error">{error}</p>}
-  </div>
-);
+        error={Boolean(error)}
+        helperText={error || helperText || " "}
+        fullWidth
+        select={select}
+        multiline={multiline}
+        rows={rows}
+        inputRef={ref}
+        inputProps={inputProps}
+        {...fieldProps}
+        {...textFieldProps}
+        InputProps={{
+          endAdornment: endAdornment ? (
+            <InputAdornment position="end">{endAdornment}</InputAdornment>
+          ) : undefined,
+          ...textFieldProps?.InputProps,
+        }}
+        InputLabelProps={{
+          shrink: true,
+          ...textFieldProps?.InputLabelProps,
+        }}
+        sx={{
+          "& .MuiInputLabel-root": {
+            fontFamily: '"IBM Plex Mono", monospace',
+            letterSpacing: "0.08em",
+          },
+          "& .MuiInputBase-root": {
+            borderRadius: 2.5,
+          },
+          "& .MuiFormHelperText-root": {
+            ml: 0,
+            fontFamily: '"IBM Plex Mono", monospace',
+          },
+          ...sx,
+        }}
+      >
+        {children}
+      </TextField>
+    </>
+  );
+};
 
 export default FormField;

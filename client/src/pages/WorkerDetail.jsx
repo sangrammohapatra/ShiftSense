@@ -8,23 +8,41 @@
  */
 
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Grid,
+  MenuItem,
+  Paper,
+  Skeleton,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
+} from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
+import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
+  AlertTriangle,
   ArrowLeft,
-  Pencil,
-  X,
-  CheckCircle2,
-  Loader2,
-  Phone,
-  MapPin,
   Briefcase,
   CalendarDays,
-  TrendingDown,
-  AlertTriangle,
+  CheckCircle2,
   Clock,
+  MapPin,
+  Pencil,
+  Phone,
+  TrendingDown,
+  X,
 } from "lucide-react";
 
 import api from "@/api/axios";
@@ -35,94 +53,68 @@ import { OCCUPATION_ENUM } from "@/constants/occupations";
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 const fetchWorkerDetail = async (workerId) => {
-  const res = await api.get(`/workers/${workerId}`);
-  return res.data.data;
+  const response = await api.get(`/workers/${workerId}`);
+  return response.data.data;
 };
 
 const fetchShifts = async (workerId, month) => {
   const params = month ? { month } : {};
-  const res = await api.get(`/workers/shifts/${workerId}`, { params });
-  return res.data.data;
+  const response = await api.get(`/workers/shifts/${workerId}`, { params });
+  return response.data.data;
 };
 
 const patchWorker = async ({ workerId, updates }) => {
-  const res = await api.patch(`/workers/${workerId}`, updates);
-  return res.data.data;
+  const response = await api.patch(`/workers/${workerId}`, updates);
+  return response.data.data;
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const fmtDate = (d) =>
-  new Date(d).toLocaleDateString("en-IN", {
+const formatDate = (value) =>
+  new Date(value).toLocaleDateString("en-IN", {
     day: "numeric",
     month: "short",
     year: "numeric",
   });
 
-const fmtCurrency = (n) =>
-  `₹${Number(n ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+const formatCurrency = (value) =>
+  `₹${Number(value ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 const STATUS_STYLES = {
-  logged: { bg: "rgba(88,166,255,0.1)", color: "#58a6ff", label: "Logged" },
-  disputed: { bg: "rgba(248,81,73,0.1)", color: "#f85149", label: "Disputed" },
-  resolved: { bg: "rgba(63,185,80,0.1)", color: "#3fb950", label: "Resolved" },
+  logged: { color: "#8cc2ff", bg: "rgba(88,166,255,0.14)", label: "Logged" },
+  disputed: { color: "#ff938b", bg: "rgba(248,81,73,0.14)", label: "Disputed" },
+  resolved: { color: "#7ee787", bg: "rgba(63,185,80,0.14)", label: "Resolved" },
 };
 
 const StatusBadge = ({ status }) => {
-  const s = STATUS_STYLES[status] ?? STATUS_STYLES.logged;
+  const style = STATUS_STYLES[status] ?? STATUS_STYLES.logged;
+
   return (
-    <span
-      className="text-xs font-bold px-2 py-0.5 uppercase tracking-wider"
-      style={{
-        background: s.bg,
-        color: s.color,
-        borderRadius: "var(--radius-sm)",
-        fontFamily: "var(--font-display)",
+    <Chip
+      size="small"
+      label={style.label}
+      sx={{
+        borderRadius: 10,
+        bgcolor: style.bg,
+        color: style.color,
+        fontFamily: '"IBM Plex Mono", monospace',
       }}
-    >
-      {s.label}
-    </span>
+    />
   );
 };
 
-const Skeleton = ({ w = "w-full", h = "h-4" }) => (
-  <div
-    className={`${w} ${h} rounded animate-pulse`}
-    style={{ background: "var(--bg-elevated)" }}
-  />
-);
-
-// ─── Profile stat pill ────────────────────────────────────────────────────────
-const InfoPill = ({ icon: Icon, label, value }) => (
-  <div
-    className="flex items-center gap-2 px-3 py-2"
-    style={{
-      background: "var(--bg-elevated)",
-      borderRadius: "var(--radius)",
-      minWidth: 0,
-    }}
-  >
-    <Icon size={12} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
-    <div className="min-w-0">
-      <p
-        className="text-xs uppercase tracking-widest"
-        style={{
-          color: "var(--text-muted)",
-          fontFamily: "var(--font-display)",
-        }}
-      >
-        {label}
-      </p>
-      <p
-        className="text-sm font-medium truncate"
-        style={{
-          color: "var(--text-primary)",
-          fontFamily: "var(--font-display)",
-        }}
-      >
-        {value || "—"}
-      </p>
-    </div>
-  </div>
+const InfoCard = ({ icon: Icon, label, value }) => (
+  <Paper sx={{ p: 2, borderRadius: 1, bgcolor: "rgba(255,255,255,0.03)" }}>
+    <Stack direction="row" spacing={1.25} alignItems="center">
+      <Icon size={16} />
+      <Box>
+        <Typography variant="overline" color="text.secondary">
+          {label}
+        </Typography>
+        <Typography sx={{ fontFamily: '"IBM Plex Mono", monospace', fontWeight: 700 }}>
+          {value || "—"}
+        </Typography>
+      </Box>
+    </Stack>
+  </Paper>
 );
 
 // ─── Inline edit form ─────────────────────────────────────────────────────────
@@ -148,484 +140,357 @@ const EditProfileForm = ({ worker, workerId, onSaved, onCancel }) => {
       toast.success("Worker profile updated.");
       onSaved();
     },
-    onError: (err) => toast.error(err.message),
+    onError: (error) => toast.error(error.message),
   });
 
   return (
-    <form
-      onSubmit={handleSubmit(mutation.mutate)}
+    <Stack
+      component="form"
+      spacing={2}
+      onSubmit={handleSubmit((updates) => mutation.mutate(updates))}
       noValidate
-      className="space-y-4"
     >
-      <div className="grid grid-cols-2 gap-3">
-        <FormField
-          label="Name"
-          id="ew_name"
-          error={errors.name?.message}
-          reg={register("name", {
-            required: "Name is required.",
-            maxLength: { value: 100, message: "Max 100 chars." },
-          })}
-        />
-
-        {/* State */}
-        <div>
-          <label htmlFor="ew_state" className="ss-label">
-            State
-          </label>
-          <select
-            id="ew_state"
-            className={`ss-input ${errors.state ? "error" : ""}`}
-            style={{ cursor: "pointer" }}
-            {...register("state")}
-          >
-            <option value="">Select state</option>
-            {INDIAN_STATES.map((s) => (
-              <option key={s.code} value={s.code}>
-                {s.code} — {s.name}
-              </option>
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={6}>
+          <FormField
+            label="Name"
+            id="ew_name"
+            error={errors.name?.message}
+            reg={register("name", {
+              required: "Name is required.",
+              maxLength: { value: 100, message: "Max 100 chars." },
+            })}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormField label="State" id="ew_state" select reg={register("state")}>
+            <MenuItem value="">Select state</MenuItem>
+            {INDIAN_STATES.map((state) => (
+              <MenuItem key={state.code} value={state.code}>
+                {state.code} - {state.name}
+              </MenuItem>
             ))}
-          </select>
-        </div>
-      </div>
+          </FormField>
+        </Grid>
+      </Grid>
 
-      <div className="grid grid-cols-2 gap-3">
-        {/* Occupation */}
-        <div>
-          <label htmlFor="ew_occ" className="ss-label">
-            Occupation
-          </label>
-          <select
-            id="ew_occ"
-            className="ss-input"
-            style={{ cursor: "pointer" }}
-            {...register("occupation")}
-          >
-            <option value="">Select occupation</option>
-            {OCCUPATION_ENUM.map((o) => (
-              <option key={o} value={o} className="capitalize">
-                {o}
-              </option>
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={6}>
+          <FormField label="Occupation" id="ew_occ" select reg={register("occupation")}>
+            <MenuItem value="">Select occupation</MenuItem>
+            {OCCUPATION_ENUM.map((occupation) => (
+              <MenuItem
+                key={occupation}
+                value={occupation}
+                sx={{ textTransform: "capitalize" }}
+              >
+                {occupation}
+              </MenuItem>
             ))}
-          </select>
-        </div>
+          </FormField>
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormField
+            label="Claimed daily wage (₹)"
+            id="ew_wage"
+            type="number"
+            placeholder="e.g. 500"
+            error={errors.claimed_daily_wage?.message}
+            reg={register("claimed_daily_wage", {
+              min: { value: 0, message: "Must be 0 or more." },
+              valueAsNumber: true,
+            })}
+          />
+        </Grid>
+      </Grid>
 
-        <FormField
-          label="Claimed daily wage (₹)"
-          id="ew_wage"
-          type="number"
-          placeholder="e.g. 500"
-          error={errors.claimed_daily_wage?.message}
-          reg={register("claimed_daily_wage", {
-            min: { value: 0, message: "Must be ≥ 0." },
-            valueAsNumber: true,
-          })}
-        />
-      </div>
-
-      <div className="flex gap-2 pt-1">
-        <button
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+        <Button
           type="submit"
           disabled={!isDirty || isSubmitting || mutation.isPending}
-          className="ss-btn flex-1"
+          variant="contained"
+          startIcon={<CheckCircle2 size={16} />}
+          sx={{ flex: 1, borderRadius: 10 }}
         >
-          {isSubmitting || mutation.isPending ? (
-            <>
-              <Loader2 size={14} className="animate-spin" /> Saving…
-            </>
-          ) : (
-            <>
-              <CheckCircle2 size={14} /> Save Changes
-            </>
-          )}
-        </button>
-        <button type="button" onClick={onCancel} className="ss-btn-ghost">
-          <X size={14} /> Cancel
-        </button>
-      </div>
-    </form>
+          Save Changes
+        </Button>
+        <Button
+          type="button"
+          onClick={onCancel}
+          variant="outlined"
+          color="inherit"
+          startIcon={<X size={16} />}
+          sx={{ borderRadius: 10 }}
+        >
+          Cancel
+        </Button>
+      </Stack>
+    </Stack>
   );
 };
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
 const WorkerDetail = () => {
+  const theme = useTheme();
   const { id: workerId } = useParams();
   const navigate = useNavigate();
   const [editMode, setEditMode] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(""); // "YYYY-MM" or ""
+  const [selectedMonth, setSelectedMonth] = useState("");
 
-  // Worker profile query
   const { data: detailData, isLoading: detailLoading } = useQuery({
     queryKey: ["worker-detail", workerId],
     queryFn: () => fetchWorkerDetail(workerId),
-    enabled: !!workerId,
+    enabled: Boolean(workerId),
   });
 
-  // Shifts query
   const { data: shiftData, isLoading: shiftsLoading } = useQuery({
     queryKey: ["worker-shifts", workerId, selectedMonth],
     queryFn: () => fetchShifts(workerId, selectedMonth),
-    enabled: !!workerId,
+    enabled: Boolean(workerId),
   });
 
   const worker = detailData?.worker;
   const shifts = shiftData?.shifts ?? [];
 
-  // Generate last 6 month options for filter
-  const monthOptions = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - i);
-    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const label = d.toLocaleDateString("en-IN", {
+  const monthOptions = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - index);
+    const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    const label = date.toLocaleDateString("en-IN", {
       month: "long",
       year: "numeric",
     });
-    return { val, label };
+
+    return { value, label };
   });
 
   const monthlyShortfall = shiftData?.monthly_shortfall ?? 0;
 
   return (
     <Layout>
-      <div className="p-6 max-w-5xl mx-auto space-y-5">
-        {/* ── Back + header ─────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate("/workers")}
-            className="p-2 rounded transition-colors"
-            style={{
-              background: "var(--bg-elevated)",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--text-secondary)",
-            }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.color = "var(--text-primary)")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.color = "var(--text-secondary)")
-            }
-          >
-            <ArrowLeft size={16} />
-          </button>
-          <div>
+      <Box sx={{ maxWidth: 1220, mx: "auto", px: { xs: 2, md: 3 }, py: { xs: 3, md: 4 } }}>
+        <Stack spacing={3}>
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Button
+              onClick={() => navigate("/workers")}
+              variant="outlined"
+              color="inherit"
+              startIcon={<ArrowLeft size={16} />}
+              sx={{ borderRadius: 10 }}
+            >
+              Back
+            </Button>
+            <Box>
+              {detailLoading ? (
+                <Skeleton variant="text" width={180} height={40} />
+              ) : (
+                <Typography variant="h4">{worker?.name ?? "Worker"}</Typography>
+              )}
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+                Worker detail · ID: {workerId?.slice(-8).toUpperCase()}
+              </Typography>
+            </Box>
+          </Stack>
+
+          {!detailLoading && monthlyShortfall > 0 ? (
+            <Alert
+              severity="error"
+              icon={<AlertTriangle size={18} />}
+              sx={{
+                borderRadius: 1,
+                bgcolor: alpha(theme.palette.error.main, 0.08),
+              }}
+            >
+              Shortfall this month: {formatCurrency(monthlyShortfall)}. Wages below
+              statutory minimum detected.
+            </Alert>
+          ) : null}
+
+          <Paper sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 1 }}>
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={2}
+              justifyContent="space-between"
+              alignItems={{ xs: "flex-start", sm: "center" }}
+              sx={{ mb: 3 }}
+            >
+              <Typography variant="overline" color="text.secondary">
+                Worker Profile
+              </Typography>
+              {!editMode ? (
+                <Button
+                  onClick={() => setEditMode(true)}
+                  variant="outlined"
+                  startIcon={<Pencil size={16} />}
+                  sx={{ borderRadius: 10 }}
+                >
+                  Edit
+                </Button>
+              ) : null}
+            </Stack>
+
             {detailLoading ? (
-              <Skeleton w="w-40" h="h-6" />
+              <Grid container spacing={2}>
+                {[0, 1, 2, 3].map((card) => (
+                  <Grid key={card} item xs={12} sm={6} md={3}>
+                    <Skeleton variant="rounded" height={88} />
+                  </Grid>
+                ))}
+              </Grid>
+            ) : editMode ? (
+              <EditProfileForm
+                worker={worker}
+                workerId={workerId}
+                onSaved={() => setEditMode(false)}
+                onCancel={() => setEditMode(false)}
+              />
             ) : (
-              <h1
-                className="text-xl font-bold"
-                style={{
-                  fontFamily: "var(--font-display)",
-                  color: "var(--text-primary)",
-                }}
-              >
-                {worker?.name ?? "Worker"}
-              </h1>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6} md={3}>
+                  <InfoCard icon={Phone} label="Phone" value={worker?.phone_number} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <InfoCard icon={MapPin} label="State" value={worker?.state} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <InfoCard icon={Briefcase} label="Occupation" value={worker?.occupation} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <InfoCard
+                    icon={TrendingDown}
+                    label="Claimed/Day"
+                    value={worker?.claimed_daily_wage ? `₹${worker.claimed_daily_wage}` : "Not set"}
+                  />
+                </Grid>
+              </Grid>
             )}
-            <p
-              className="text-xs mt-0.5"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              Worker detail · ID: {workerId?.slice(-8).toUpperCase()}
-            </p>
-          </div>
-        </div>
+          </Paper>
 
-        {/* ── Monthly shortfall alert ───────────────────────────────────────── */}
-        {!detailLoading && monthlyShortfall > 0 && (
-          <div
-            className="flex items-center gap-3 px-4 py-3"
-            style={{
-              background: "rgba(248,81,73,0.08)",
-              border: "1px solid rgba(248,81,73,0.25)",
-              borderRadius: "var(--radius)",
-            }}
+          <Stack
+            direction={{ xs: "column", md: "row" }}
+            spacing={2}
+            justifyContent="space-between"
+            alignItems={{ xs: "flex-start", md: "center" }}
           >
-            <AlertTriangle
-              size={15}
-              style={{ color: "#f85149", flexShrink: 0 }}
-            />
-            <p
-              className="text-sm"
-              style={{ color: "#f85149", fontFamily: "var(--font-display)" }}
-            >
-              <strong>
-                Shortfall this month: {fmtCurrency(monthlyShortfall)}
-              </strong>{" "}
-              — Wages below statutory minimum detected.
-            </p>
-          </div>
-        )}
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <CalendarDays size={16} color={theme.palette.text.secondary} />
+                <Typography variant="body2" color="text.secondary">
+                  {selectedMonth
+                    ? `${shiftData?.total ?? 0} shifts in selected month`
+                    : `${shiftData?.total ?? 0} shifts in the last 90 days`}
+                </Typography>
+              </Stack>
+              {shiftData?.monthly_gross > 0 ? (
+                <Chip
+                  label={`Gross this month: ${formatCurrency(shiftData.monthly_gross)}`}
+                  variant="outlined"
+                  sx={{ borderRadius: 10, color: "primary.main", borderColor: alpha(theme.palette.primary.main, 0.28) }}
+                />
+              ) : null}
+            </Stack>
 
-        {/* ── Profile card ─────────────────────────────────────────────────── */}
-        <div className="ss-card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <p
-              className="text-xs uppercase tracking-widest"
-              style={{
-                color: "var(--text-muted)",
-                fontFamily: "var(--font-display)",
+            <FormField
+              label="Period"
+              id="month_filter"
+              select
+              textFieldProps={{ sx: { minWidth: { xs: "100%", md: 240 } } }}
+              reg={{
+                name: "month_filter",
+                value: selectedMonth,
+                onChange: (event) => setSelectedMonth(event.target.value),
               }}
             >
-              Worker Profile
-            </p>
-            {!editMode && (
-              <button
-                onClick={() => setEditMode(true)}
-                className="ss-btn-ghost flex items-center gap-1.5 text-xs"
-              >
-                <Pencil size={12} /> Edit
-              </button>
-            )}
-          </div>
-
-          {detailLoading ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {[...Array(4)].map((_, i) => (
-                <Skeleton key={i} h="h-14" />
+              <MenuItem value="">Last 90 days</MenuItem>
+              {monthOptions.map((month) => (
+                <MenuItem key={month.value} value={month.value}>
+                  {month.label}
+                </MenuItem>
               ))}
-            </div>
-          ) : editMode ? (
-            <EditProfileForm
-              worker={worker}
-              workerId={workerId}
-              onSaved={() => setEditMode(false)}
-              onCancel={() => setEditMode(false)}
-            />
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <InfoPill
-                icon={Phone}
-                label="Phone"
-                value={worker?.phone_number}
-              />
-              <InfoPill icon={MapPin} label="State" value={worker?.state} />
-              <InfoPill
-                icon={Briefcase}
-                label="Occupation"
-                value={worker?.occupation}
-              />
-              <InfoPill
-                icon={TrendingDown}
-                label="Claimed/Day"
-                value={
-                  worker?.claimed_daily_wage
-                    ? `₹${worker.claimed_daily_wage}`
-                    : "Not set"
-                }
-              />
-            </div>
-          )}
-        </div>
+            </FormField>
+          </Stack>
 
-        {/* ── Month selector + stats strip ──────────────────────────────────── */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3 flex-wrap">
-            <div
-              className="flex items-center gap-2 text-sm"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              <CalendarDays size={14} />
-              <span style={{ fontFamily: "var(--font-display)" }}>
-                {selectedMonth
-                  ? `${shiftData?.total ?? 0} shifts in selected month`
-                  : `${shiftData?.total ?? 0} shifts (last 90 days)`}
-              </span>
-            </div>
-            {shiftData?.monthly_gross > 0 && (
-              <span
-                className="text-xs px-2 py-1"
-                style={{
-                  background: "rgba(240,165,0,0.1)",
-                  color: "var(--accent)",
-                  borderRadius: "var(--radius-sm)",
-                  fontFamily: "var(--font-display)",
-                }}
-              >
-                Gross this month: {fmtCurrency(shiftData.monthly_gross)}
-              </span>
-            )}
-          </div>
+          <TableContainer component={Paper} sx={{ borderRadius: 1, overflow: "hidden" }}>
+            <Box sx={{ px: 3, py: 2.5, borderBottom: "1px solid", borderColor: "divider" }}>
+              <Typography variant="overline" color="text.secondary">
+                Shift History
+              </Typography>
+            </Box>
 
-          {/* Month picker */}
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className="ss-input text-xs w-44"
-            style={{ cursor: "pointer" }}
-          >
-            <option value="">Last 90 days</option>
-            {monthOptions.map((m) => (
-              <option key={m.val} value={m.val}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* ── Shifts table ─────────────────────────────────────────────────── */}
-        <div className="ss-card overflow-hidden">
-          <div
-            className="px-5 py-3"
-            style={{ borderBottom: "1px solid var(--border)" }}
-          >
-            <p
-              className="text-xs uppercase tracking-widest font-medium"
-              style={{
-                color: "var(--text-secondary)",
-                fontFamily: "var(--font-display)",
-              }}
-            >
-              Shift History
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  {[
-                    "Date",
-                    "Hours",
-                    "OT hrs",
-                    "Gross Owed",
-                    "Claimed",
-                    "Shortfall",
-                    "Status",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-2.5 text-left text-xs uppercase tracking-widest whitespace-nowrap"
-                      style={{
-                        color: "var(--text-muted)",
-                        fontFamily: "var(--font-display)",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Hours</TableCell>
+                  <TableCell>OT hrs</TableCell>
+                  <TableCell>Gross Owed</TableCell>
+                  <TableCell>Claimed</TableCell>
+                  <TableCell>Shortfall</TableCell>
+                  <TableCell>Status</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {shiftsLoading ? (
-                  [...Array(5)].map((_, i) => (
-                    <tr
-                      key={i}
-                      style={{ borderBottom: "1px solid var(--border)" }}
-                    >
-                      {[...Array(7)].map((_, j) => (
-                        <td key={j} className="px-4 py-3">
-                          <Skeleton w="w-16" h="h-3" />
-                        </td>
+                  [0, 1, 2, 3, 4].map((row) => (
+                    <TableRow key={row}>
+                      {[0, 1, 2, 3, 4, 5, 6].map((cell) => (
+                        <TableCell key={cell}>
+                          <Skeleton variant="text" width={90} />
+                        </TableCell>
                       ))}
-                    </tr>
+                    </TableRow>
                   ))
                 ) : shifts.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-10 text-center text-sm"
-                      style={{ color: "var(--text-muted)" }}
-                    >
+                  <TableRow>
+                    <TableCell colSpan={7} sx={{ py: 8, textAlign: "center", color: "text.secondary" }}>
                       No shifts found for the selected period.
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : (
-                  shifts.map((s, i) => (
-                    <tr
-                      key={s._id}
-                      style={{
-                        borderBottom:
-                          i < shifts.length - 1
-                            ? "1px solid var(--border)"
-                            : "none",
-                      }}
-                    >
-                      <td
-                        className="px-4 py-3 text-xs whitespace-nowrap"
-                        style={{
-                          color: "var(--text-secondary)",
-                          fontFamily: "var(--font-display)",
-                        }}
-                      >
-                        {fmtDate(s.shift_date)}
-                      </td>
-                      <td
-                        className="px-4 py-3 text-xs"
-                        style={{
-                          color: "var(--text-primary)",
-                          fontFamily: "var(--font-display)",
-                        }}
-                      >
-                        <span className="flex items-center gap-1">
-                          <Clock
-                            size={10}
-                            style={{ color: "var(--text-muted)" }}
-                          />
-                          {s.hours_worked}h
-                        </span>
-                      </td>
-                      <td
-                        className="px-4 py-3 text-xs"
-                        style={{
+                  shifts.map((shift) => (
+                    <TableRow key={shift._id} hover>
+                      <TableCell sx={{ color: "text.secondary" }}>
+                        {formatDate(shift.shift_date)}
+                      </TableCell>
+                      <TableCell>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Clock size={14} color={theme.palette.text.secondary} />
+                          <Typography variant="body2">{shift.hours_worked}h</Typography>
+                        </Stack>
+                      </TableCell>
+                      <TableCell sx={{ color: shift.ot_hours > 0 ? "primary.main" : "text.secondary" }}>
+                        {shift.ot_hours > 0 ? `+${shift.ot_hours}h` : "—"}
+                      </TableCell>
+                      <TableCell sx={{ fontFamily: '"IBM Plex Mono", monospace', fontWeight: 700 }}>
+                        {formatCurrency(shift.gross_owed)}
+                      </TableCell>
+                      <TableCell sx={{ color: shift.claimed_amount > 0 ? "text.secondary" : "text.disabled" }}>
+                        {shift.claimed_amount > 0 ? formatCurrency(shift.claimed_amount) : "—"}
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          fontFamily: '"IBM Plex Mono", monospace',
+                          fontWeight: 700,
                           color:
-                            s.ot_hours > 0
-                              ? "var(--accent)"
-                              : "var(--text-muted)",
-                          fontFamily: "var(--font-display)",
+                            shift.shortfall > 50
+                              ? "error.main"
+                              : shift.shortfall > 0
+                                ? "warning.main"
+                                : "text.secondary",
                         }}
                       >
-                        {s.ot_hours > 0 ? `+${s.ot_hours}h` : "—"}
-                      </td>
-                      <td
-                        className="px-4 py-3 text-xs font-medium"
-                        style={{
-                          color: "var(--text-primary)",
-                          fontFamily: "var(--font-display)",
-                        }}
-                      >
-                        {fmtCurrency(s.gross_owed)}
-                      </td>
-                      <td
-                        className="px-4 py-3 text-xs"
-                        style={{
-                          color:
-                            s.claimed_amount > 0
-                              ? "var(--text-secondary)"
-                              : "var(--text-muted)",
-                          fontFamily: "var(--font-display)",
-                        }}
-                      >
-                        {s.claimed_amount > 0
-                          ? fmtCurrency(s.claimed_amount)
-                          : "—"}
-                      </td>
-                      <td
-                        className="px-4 py-3 text-xs font-bold"
-                        style={{
-                          color:
-                            s.shortfall > 50
-                              ? "#f85149"
-                              : s.shortfall > 0
-                                ? "var(--accent)"
-                                : "var(--text-muted)",
-                          fontFamily: "var(--font-display)",
-                        }}
-                      >
-                        {s.shortfall > 0 ? fmtCurrency(s.shortfall) : "—"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={s.status} />
-                      </td>
-                    </tr>
+                        {shift.shortfall > 0 ? formatCurrency(shift.shortfall) : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={shift.status} />
+                      </TableCell>
+                    </TableRow>
                   ))
                 )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Stack>
+      </Box>
     </Layout>
   );
 };

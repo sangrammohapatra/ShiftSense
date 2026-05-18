@@ -10,137 +10,148 @@
  */
 
 import { useState } from "react";
+import {
+  Button,
+  CircularProgress,
+  Divider,
+  IconButton,
+  Link as MuiLink,
+  Stack,
+  Typography,
+} from "@mui/material";
 import { useForm } from "react-hook-form";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 
 import api from "@/api/axios";
-import useAuthStore from "@/store/authStore";
 import AuthShell from "@/components/ui/AuthShell";
 import FormField from "@/components/ui/FormField";
+import useAuthStore from "@/store/authStore";
 
 const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const setAuth = useAuthStore((s) => s.setAuth);
-
-  const [showPwd, setShowPwd] = useState(false);
+  const setAuth = useAuthStore((state) => state.setAuth);
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm({ defaultValues: { email: "", password: "" } });
+  } = useForm({
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
 
-  // ── Submit ──────────────────────────────────────────────────────────────────
-  const onSubmit = async (data) => {
+  const onSubmit = async (formData) => {
     try {
-      const res = await api.post("/auth/login", data);
-      const { employer, token } = res.data.data;
+      const response = await api.post("/auth/login", formData);
+      const { employer, token } = response.data.data;
       setAuth(employer, token);
       toast.success(`Welcome back, ${employer.contact_name.split(" ")[0]}!`);
       const from = location.state?.from?.pathname || "/dashboard";
       navigate(from, { replace: true });
-    } catch (err) {
-      toast.error(err.message || "Login failed. Please try again.");
+    } catch (error) {
+      toast.error(error.message || "Login failed. Please try again.");
     }
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <AuthShell>
-      <div className="mb-8">
-        <h1
-          className="text-xl font-semibold mb-1"
-          style={{
-            fontFamily: "var(--font-display)",
-            color: "var(--text-primary)",
-          }}
+      <Stack spacing={3}>
+        <Stack spacing={1}>
+          <Typography variant="h5">Employer Login</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Access your workforce compliance dashboard.
+          </Typography>
+        </Stack>
+
+        <Divider />
+
+        <Stack
+          component="form"
+          spacing={2}
+          onSubmit={handleSubmit(onSubmit)}
+          noValidate
         >
-          Employer Login
-        </h1>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          Access your workforce compliance dashboard.
-        </p>
-      </div>
+          <FormField
+            label="Email address"
+            id="email"
+            type="email"
+            placeholder="you@company.com"
+            error={errors.email?.message}
+            reg={register("email", {
+              required: "Email is required.",
+              pattern: {
+                value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                message: "Enter a valid email address.",
+              },
+            })}
+          />
 
-      <div className="mb-6 h-px" style={{ background: "var(--border)" }} />
+          <FormField
+            label="Password"
+            id="password"
+            type={showPassword ? "text" : "password"}
+            placeholder="Enter your password"
+            error={errors.password?.message}
+            reg={register("password", {
+              required: "Password is required.",
+              minLength: {
+                value: 8,
+                message: "Password must be at least 8 characters.",
+              },
+            })}
+            endAdornment={
+              <IconButton
+                onClick={() => setShowPassword((value) => !value)}
+                edge="end"
+                tabIndex={-1}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                sx={{ color: "text.secondary" }}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </IconButton>
+            }
+          />
 
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
-        <FormField
-          label="Email address"
-          id="email"
-          type="email"
-          placeholder="you@company.com"
-          error={errors.email?.message}
-          reg={register("email", {
-            required: "Email is required.",
-            pattern: {
-              value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-              message: "Enter a valid email address.",
-            },
-          })}
-        />
-
-        <FormField
-          label="Password"
-          id="password"
-          type={showPwd ? "text" : "password"}
-          placeholder="••••••••"
-          error={errors.password?.message}
-          reg={register("password", {
-            required: "Password is required.",
-            minLength: {
-              value: 8,
-              message: "Password must be at least 8 characters.",
-            },
-          })}
-        >
-          <button
-            type="button"
-            onClick={() => setShowPwd((v) => !v)}
-            className="p-1 rounded transition-colors"
-            style={{ color: "var(--text-muted)" }}
-            tabIndex={-1}
-            aria-label={showPwd ? "Hide password" : "Show password"}
+          <Button
+            type="submit"
+            disabled={isSubmitting}
+            variant="contained"
+            size="large"
+            sx={{ mt: 1, borderRadius: 10, minHeight: 52 }}
+            startIcon={
+              isSubmitting ? <CircularProgress size={16} color="inherit" /> : null
+            }
           >
-            {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
-          </button>
-        </FormField>
+            {isSubmitting ? "Verifying" : "Log In"}
+          </Button>
+        </Stack>
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="ss-btn w-full mt-2"
-          style={{ letterSpacing: "0.1em" }}
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ textAlign: "center" }}
         >
-          {isSubmitting ? (
-            <>
-              <Loader2 size={15} className="animate-spin" /> Verifying…
-            </>
-          ) : (
-            "Log In"
-          )}
-        </button>
-      </form>
-
-      <p
-        className="mt-6 text-center text-xs"
-        style={{
-          color: "var(--text-secondary)",
-          fontFamily: "var(--font-display)",
-        }}
-      >
-        No account?{" "}
-        <Link
-          to="/register"
-          className="font-medium transition-colors"
-          style={{ color: "var(--accent)" }}
-        >
-          Register your company →
-        </Link>
-      </p>
+          No account?{" "}
+          <MuiLink
+            component={Link}
+            to="/register"
+            underline="hover"
+            sx={{
+              color: "primary.main",
+              fontFamily: '"IBM Plex Mono", monospace',
+              fontWeight: 600,
+            }}
+          >
+            Register your company
+          </MuiLink>
+        </Typography>
+      </Stack>
     </AuthShell>
   );
 };

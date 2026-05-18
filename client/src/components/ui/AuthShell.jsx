@@ -5,52 +5,67 @@
  * the card. All auth pages (Login, Register) use this as their root element.
  */
 
-const AuthShell = ({ children }) => (
-  <div
-    className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
-    style={{
-      background: "var(--bg-base)",
-      backgroundImage: `
-        linear-gradient(rgba(240,165,0,0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(240,165,0,0.03) 1px, transparent 1px)
-      `,
-      backgroundSize: "40px 40px",
-    }}
-  >
-    {/* Wordmark */}
-    <div className="mb-8 text-center">
-      <div
-        className="text-2xl font-bold tracking-[0.2em] uppercase"
-        style={{ fontFamily: "var(--font-display)", color: "var(--accent)" }}
-      >
-        ShiftSense
-      </div>
-      <div
-        className="text-xs tracking-widest mt-1 uppercase"
-        style={{ color: "var(--text-muted)", fontFamily: "var(--font-display)" }}
-      >
-        Wage Intelligence Platform
-      </div>
-    </div>
+import { Box, Container, Paper, Stack, Typography } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 
-    {/* Card */}
-    <div
-      className="ss-card auth-card w-full max-w-md p-8"
-      style={{
-        boxShadow: "0 0 0 1px var(--border), 0 24px 64px rgba(0,0,0,0.5)",
+const AuthShell = ({ children }) => {
+  const theme = useTheme();
+
+  return (
+    <Box
+      sx={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        px: 2,
+        py: 6,
+        backgroundColor: "background.default",
+        backgroundImage: `
+          linear-gradient(${alpha(theme.palette.primary.main, 0.05)} 1px, transparent 1px),
+          linear-gradient(90deg, ${alpha(theme.palette.primary.main, 0.05)} 1px, transparent 1px)
+        `,
+        backgroundSize: "40px 40px",
       }}
     >
-      {children}
-    </div>
+      <Container maxWidth="sm">
+        <Stack spacing={3} alignItems="center">
+          <Box sx={{ textAlign: "center" }}>
+            <Typography variant="h4" sx={{ color: "primary.main", letterSpacing: "0.18em" }}>
+              ShiftSense
+            </Typography>
+            <Typography variant="overline" sx={{ color: "text.secondary" }}>
+              Wage Intelligence Platform
+            </Typography>
+          </Box>
 
-    {/* Footer */}
-    <p
-      className="mt-6 text-xs text-center"
-      style={{ color: "var(--text-muted)", fontFamily: "var(--font-display)" }}
-    >
-      © {new Date().getFullYear()} ShiftSense · Compliant with Minimum Wages Act 1948
-    </p>
-  </div>
-);
+          <Paper
+            sx={{
+              width: "100%",
+              maxWidth: 560,
+              p: { xs: 3, sm: 4 },
+              borderRadius: 1,
+              boxShadow: "0 24px 64px rgba(0, 0, 0, 0.4)",
+            }}
+          >
+            {children}
+          </Paper>
+
+          <Typography
+            variant="caption"
+            sx={{
+              textAlign: "center",
+              color: "text.secondary",
+              fontFamily: '"IBM Plex Mono", monospace',
+            }}
+          >
+            Copyright {new Date().getFullYear()} ShiftSense. Minimum Wages Act 1948
+            aligned.
+          </Typography>
+        </Stack>
+      </Container>
+    </Box>
+  );
+};
 
 export default AuthShell;

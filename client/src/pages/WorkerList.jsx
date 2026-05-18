@@ -10,21 +10,46 @@
  */
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Alert,
+  Avatar,
+  Box,
+  Button,
+  Chip,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  Grid,
+  IconButton,
+  InputAdornment,
+  MenuItem,
+  Paper,
+  Skeleton,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { useForm } from "react-hook-form";
 import {
-  UserPlus,
-  UserMinus,
-  Search,
-  X,
-  Loader2,
   ChevronRight,
   Filter,
-  Phone,
+  Loader2,
   MapPin,
-  Briefcase,
+  Phone,
+  Search,
+  UserMinus,
+  UserPlus,
+  X,
 } from "lucide-react";
 
 import api from "@/api/axios";
@@ -33,69 +58,51 @@ import FormField from "@/components/ui/FormField";
 import { INDIAN_STATES } from "@/constants/india";
 import { OCCUPATION_ENUM } from "@/constants/occupations";
 
-// ─── API helpers ──────────────────────────────────────────────────────────────
 const fetchWorkers = async (params) => {
-  const res = await api.get("/workers", { params });
-  return res.data.data;
+  const response = await api.get("/workers", { params });
+  return response.data.data;
 };
 
-const linkWorker = async (phone_number) => {
-  const res = await api.post("/workers/link", { phone_number });
-  return res.data.data;
+const linkWorker = async (phoneNumber) => {
+  const response = await api.post("/workers/link", { phone_number: phoneNumber });
+  return response.data.data;
 };
 
 const unlinkWorker = async (workerId) => {
-  const res = await api.delete(`/workers/unlink/${workerId}`);
-  return res.data.data;
+  const response = await api.delete(`/workers/unlink/${workerId}`);
+  return response.data.data;
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const OCC_COLORS = {
-  construction: { bg: "rgba(88,166,255,0.12)", color: "#58a6ff" },
-  security: { bg: "rgba(63,185,80,0.12)", color: "#3fb950" },
-  domestic: { bg: "rgba(240,165,0,0.12)", color: "#f0a500" },
-  factory: { bg: "rgba(188,140,255,0.12)", color: "#bc8cff" },
-  driver: { bg: "rgba(255,123,88,0.12)", color: "#ff7b58" },
+const OCCUPATION_COLORS = {
+  construction: { bg: "rgba(88, 166, 255, 0.12)", color: "#8cc2ff" },
+  security: { bg: "rgba(63, 185, 80, 0.12)", color: "#7ee787" },
+  domestic: { bg: "rgba(240, 165, 0, 0.12)", color: "#ffd35f" },
+  factory: { bg: "rgba(188, 140, 255, 0.12)", color: "#d5b6ff" },
+  driver: { bg: "rgba(255, 123, 88, 0.12)", color: "#ffab91" },
 };
 
-const OccBadge = ({ occ }) => {
-  const style = OCC_COLORS[occ] ?? {
-    bg: "var(--bg-elevated)",
-    color: "var(--text-muted)",
+const OccupationBadge = ({ occupation }) => {
+  const style = OCCUPATION_COLORS[occupation] ?? {
+    bg: "rgba(255,255,255,0.06)",
+    color: "#98a6b7",
   };
+
   return (
-    <span
-      className="text-xs font-medium px-2 py-0.5 capitalize"
-      style={{
-        background: style.bg,
+    <Chip
+      size="small"
+      label={occupation ?? "—"}
+      sx={{
+        textTransform: "capitalize",
+        borderRadius: 10,
+        bgcolor: style.bg,
         color: style.color,
-        borderRadius: "var(--radius-sm)",
-        fontFamily: "var(--font-display)",
+        fontFamily: '"IBM Plex Mono", monospace',
       }}
-    >
-      {occ ?? "—"}
-    </span>
+    />
   );
 };
 
-const Skeleton = () => (
-  <tr>
-    {[...Array(6)].map((_, i) => (
-      <td key={i} className="px-4 py-3">
-        <div
-          className="h-4 rounded animate-pulse"
-          style={{
-            background: "var(--bg-elevated)",
-            width: `${60 + i * 10}px`,
-          }}
-        />
-      </td>
-    ))}
-  </tr>
-);
-
-// ─── Link Worker Modal ────────────────────────────────────────────────────────
-const LinkWorkerModal = ({ onClose, onLinked }) => {
+const LinkWorkerDialog = ({ open, onClose }) => {
   const queryClient = useQueryClient();
 
   const {
@@ -103,62 +110,44 @@ const LinkWorkerModal = ({ onClose, onLinked }) => {
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm({
-    defaultValues: { phone_number: "" },
+    defaultValues: {
+      phone_number: "",
+    },
   });
 
   const mutation = useMutation({
-    mutationFn: (data) => linkWorker(data.phone_number),
-    onSuccess: (data) => {
+    mutationFn: (formData) => linkWorker(formData.phone_number),
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["workers"] });
-      toast.success(`${data.worker?.name ?? "Worker"} linked successfully!`);
-      onLinked?.();
+      toast.success(`${response.worker?.name ?? "Worker"} linked successfully!`);
       onClose();
     },
-    onError: (err) => toast.error(err.message),
+    onError: (error) => {
+      toast.error(error.message);
+    },
   });
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
-    >
-      <div
-        className="ss-card w-full max-w-md p-6 relative"
-        style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}
-      >
-        <button
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle sx={{ pr: 6 }}>
+        <Typography variant="h6">Link a Worker</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          The worker must be registered on WhatsApp first. Enter their phone number
+          to link them to your account.
+        </Typography>
+        <IconButton
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded transition-colors"
-          style={{
-            color: "var(--text-muted)",
-            background: "var(--bg-elevated)",
-            border: "none",
-            cursor: "pointer",
-          }}
+          sx={{ position: "absolute", right: 16, top: 16, color: "text.secondary" }}
         >
-          <X size={15} />
-        </button>
-
-        <h2
-          className="text-base font-bold mb-1"
-          style={{
-            fontFamily: "var(--font-display)",
-            color: "var(--text-primary)",
-          }}
-        >
-          Link a Worker
-        </h2>
-        <p className="text-xs mb-5" style={{ color: "var(--text-secondary)" }}>
-          The worker must be registered on WhatsApp first. Enter their phone
-          number to link them to your account.
-        </p>
-
-        <div className="h-px mb-5" style={{ background: "var(--border)" }} />
-
-        <form
-          onSubmit={handleSubmit(mutation.mutate)}
+          <X size={18} />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent>
+        <Stack
+          component="form"
+          spacing={2}
+          onSubmit={handleSubmit((formData) => mutation.mutate(formData))}
           noValidate
-          className="space-y-4"
         >
           <FormField
             label="Worker WhatsApp number"
@@ -173,34 +162,32 @@ const LinkWorkerModal = ({ onClose, onLinked }) => {
                 message: "Enter a valid phone number (e.g. +919876543210).",
               },
             })}
+            helperText="Include the country code (+91 for India)."
           />
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            Include the country code (+91 for India).
-          </p>
 
-          <button
+          <Button
             type="submit"
             disabled={isSubmitting || mutation.isPending}
-            className="ss-btn w-full"
+            variant="contained"
+            size="large"
+            startIcon={
+              isSubmitting || mutation.isPending ? (
+                <Loader2 size={16} />
+              ) : (
+                <UserPlus size={16} />
+              )
+            }
+            sx={{ borderRadius: 10, minHeight: 50 }}
           >
-            {isSubmitting || mutation.isPending ? (
-              <>
-                <Loader2 size={14} className="animate-spin" /> Linking…
-              </>
-            ) : (
-              <>
-                <UserPlus size={14} /> Link Worker
-              </>
-            )}
-          </button>
-        </form>
-      </div>
-    </div>
+            {isSubmitting || mutation.isPending ? "Linking" : "Link Worker"}
+          </Button>
+        </Stack>
+      </DialogContent>
+    </Dialog>
   );
 };
 
-// ─── Unlink confirmation ──────────────────────────────────────────────────────
-const UnlinkButton = ({ workerId, workerName }) => {
+const UnlinkAction = ({ workerId, workerName, onStop }) => {
   const [confirming, setConfirming] = useState(false);
   const queryClient = useQueryClient();
 
@@ -211,101 +198,76 @@ const UnlinkButton = ({ workerId, workerName }) => {
       toast.success(`${workerName} unlinked.`);
       setConfirming(false);
     },
-    onError: (err) => {
-      toast.error(err.message);
+    onError: (error) => {
+      toast.error(error.message);
       setConfirming(false);
     },
   });
 
   if (confirming) {
     return (
-      <div className="flex items-center gap-2">
-        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+      <Stack direction="row" spacing={1} alignItems="center">
+        <Typography variant="caption" color="text.secondary">
           Sure?
-        </span>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
+        </Typography>
+        <Button
+          size="small"
+          color="error"
+          variant="contained"
+          onClick={(event) => {
+            onStop(event);
             mutation.mutate();
           }}
-          disabled={mutation.isPending}
-          className="text-xs px-2 py-1 font-bold transition-colors"
-          style={{
-            background: "rgba(248,81,73,0.15)",
-            color: "#f85149",
-            border: "none",
-            borderRadius: "var(--radius-sm)",
-            cursor: "pointer",
-            fontFamily: "var(--font-display)",
-          }}
+          sx={{ minWidth: 0, borderRadius: 10, px: 1.5 }}
         >
-          {mutation.isPending ? (
-            <Loader2 size={10} className="animate-spin" />
-          ) : (
-            "Yes"
-          )}
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
+          Yes
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          color="inherit"
+          onClick={(event) => {
+            onStop(event);
             setConfirming(false);
           }}
-          className="text-xs px-2 py-1"
-          style={{
-            color: "var(--text-muted)",
-            background: "var(--bg-elevated)",
-            border: "none",
-            borderRadius: "var(--radius-sm)",
-            cursor: "pointer",
-          }}
+          sx={{ minWidth: 0, borderRadius: 10, px: 1.5 }}
         >
           No
-        </button>
-      </div>
+        </Button>
+      </Stack>
     );
   }
 
   return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation();
+    <Button
+      size="small"
+      variant="outlined"
+      color="inherit"
+      startIcon={<UserMinus size={14} />}
+      onClick={(event) => {
+        onStop(event);
         setConfirming(true);
       }}
-      className="flex items-center gap-1 text-xs px-2.5 py-1.5 transition-all duration-150"
-      style={{
-        color: "var(--text-muted)",
-        background: "transparent",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-sm)",
-        cursor: "pointer",
-        fontFamily: "var(--font-display)",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = "#f85149";
-        e.currentTarget.style.color = "#f85149";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = "var(--border)";
-        e.currentTarget.style.color = "var(--text-muted)";
-      }}
+      sx={{ borderRadius: 10 }}
     >
-      <UserMinus size={11} /> Unlink
-    </button>
+      Unlink
+    </Button>
   );
 };
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 const WorkerList = () => {
+  const theme = useTheme();
   const navigate = useNavigate();
-  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
   const [search, setSearch] = useState("");
   const [filterState, setFilterState] = useState("");
-  const [filterOcc, setFilterOcc] = useState("");
+  const [filterOccupation, setFilterOccupation] = useState("");
 
   const queryParams = {};
   if (search) queryParams.search = search;
   if (filterState) queryParams.state = filterState;
-  if (filterOcc) queryParams.occupation = filterOcc;
+  if (filterOccupation) queryParams.occupation = filterOccupation;
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["workers", queryParams],
@@ -317,299 +279,235 @@ const WorkerList = () => {
 
   return (
     <Layout>
-      <div className="p-6 max-w-7xl mx-auto space-y-5">
-        {/* ── Header ───────────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1
-              className="text-xl font-bold"
-              style={{
-                fontFamily: "var(--font-display)",
-                color: "var(--text-primary)",
-              }}
-            >
-              Workers
-            </h1>
-            <p
-              className="text-sm mt-0.5"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              {isLoading ? "Loading…" : `${data?.count ?? 0} linked workers`}
-            </p>
-          </div>
-          <button
-            onClick={() => setShowLinkModal(true)}
-            className="ss-btn flex items-center gap-2"
+      <Box sx={{ maxWidth: 1360, mx: "auto", px: { xs: 2, md: 3 }, py: { xs: 3, md: 4 } }}>
+        <Stack spacing={3}>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={2}
+            justifyContent="space-between"
+            alignItems={{ xs: "flex-start", sm: "center" }}
           >
-            <UserPlus size={14} /> Link Worker
-          </button>
-        </div>
-
-        {/* ── Filters ──────────────────────────────────────────────────────── */}
-        <div className="flex flex-wrap gap-3 items-center">
-          {/* Search */}
-          <div className="relative flex-1 min-w-48">
-            <Search
-              size={13}
-              className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-              style={{ color: "var(--text-muted)" }}
-            />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name…"
-              className="ss-input pl-8 text-sm"
-            />
-          </div>
-
-          {/* State filter */}
-          <div className="flex items-center gap-2">
-            <Filter size={12} style={{ color: "var(--text-muted)" }} />
-            <select
-              value={filterState}
-              onChange={(e) => setFilterState(e.target.value)}
-              className="ss-input text-xs w-40"
-              style={{ cursor: "pointer" }}
+            <Box>
+              <Typography variant="h4">Workers</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                {isLoading ? "Loading..." : `${data?.count ?? 0} linked workers`}
+              </Typography>
+            </Box>
+            <Button
+              onClick={() => setShowLinkDialog(true)}
+              variant="contained"
+              startIcon={<UserPlus size={16} />}
+              sx={{ borderRadius: 10 }}
             >
-              <option value="">All States</option>
-              {INDIAN_STATES.map((s) => (
-                <option key={s.code} value={s.code}>
-                  {s.code} — {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
+              Link Worker
+            </Button>
+          </Stack>
 
-          {/* Occupation filter */}
-          <select
-            value={filterOcc}
-            onChange={(e) => setFilterOcc(e.target.value)}
-            className="ss-input text-xs w-40"
-            style={{ cursor: "pointer" }}
-          >
-            <option value="">All Occupations</option>
-            {OCCUPATION_ENUM.map((o) => (
-              <option key={o} value={o} className="capitalize">
-                {o}
-              </option>
-            ))}
-          </select>
-
-          {/* Clear filters */}
-          {(search || filterState || filterOcc) && (
-            <button
-              onClick={() => {
-                setSearch("");
-                setFilterState("");
-                setFilterOcc("");
-              }}
-              className="flex items-center gap-1 text-xs px-2.5 py-1.5"
-              style={{
-                color: "var(--text-muted)",
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius-sm)",
-                cursor: "pointer",
-                fontFamily: "var(--font-display)",
-              }}
-            >
-              <X size={11} /> Clear
-            </button>
-          )}
-        </div>
-
-        {/* ── Error ────────────────────────────────────────────────────────── */}
-        {isError && (
-          <div
-            className="px-4 py-3 text-sm"
-            style={{
-              background: "rgba(248,81,73,0.1)",
-              border: "1px solid rgba(248,81,73,0.3)",
-              borderRadius: "var(--radius)",
-              color: "#f85149",
-            }}
-          >
-            {error?.message ?? "Failed to load workers."}
-          </div>
-        )}
-
-        {/* ── Table ────────────────────────────────────────────────────────── */}
-        <div className="ss-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  {[
-                    "Name",
-                    "Phone",
-                    "State",
-                    "Occupation",
-                    "Claimed Wage/Day",
-                    "",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-left text-xs uppercase tracking-widest font-medium whitespace-nowrap"
-                      style={{
-                        color: "var(--text-muted)",
-                        fontFamily: "var(--font-display)",
-                      }}
-                    >
-                      {h}
-                    </th>
+          <Paper sx={{ p: 2.5, borderRadius: 1 }}>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} md={5}>
+                <TextField
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search by name"
+                  fullWidth
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Search size={16} color={theme.palette.text.secondary} />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <TextField
+                  select
+                  fullWidth
+                  label="State"
+                  value={filterState}
+                  onChange={(event) => setFilterState(event.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Filter size={16} color={theme.palette.text.secondary} />
+                      </InputAdornment>
+                    ),
+                  }}
+                >
+                  <MenuItem value="">All states</MenuItem>
+                  {INDIAN_STATES.map((state) => (
+                    <MenuItem key={state.code} value={state.code}>
+                      {state.code} - {state.name}
+                    </MenuItem>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
+                </TextField>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <TextField
+                  select
+                  fullWidth
+                  label="Occupation"
+                  value={filterOccupation}
+                  onChange={(event) => setFilterOccupation(event.target.value)}
+                >
+                  <MenuItem value="">All occupations</MenuItem>
+                  {OCCUPATION_ENUM.map((occupation) => (
+                    <MenuItem key={occupation} value={occupation} sx={{ textTransform: "capitalize" }}>
+                      {occupation}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} md={1}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  color="inherit"
+                  onClick={() => {
+                    setSearch("");
+                    setFilterState("");
+                    setFilterOccupation("");
+                  }}
+                  disabled={!search && !filterState && !filterOccupation}
+                  sx={{ borderRadius: 10, minHeight: 56 }}
+                >
+                  Clear
+                </Button>
+              </Grid>
+            </Grid>
+          </Paper>
+
+          {isError ? (
+            <Alert severity="error" sx={{ borderRadius: 1 }}>
+              {error?.message ?? "Failed to load workers."}
+            </Alert>
+          ) : null}
+
+          <TableContainer component={Paper} sx={{ borderRadius: 1, overflow: "hidden" }}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Phone</TableCell>
+                  <TableCell>State</TableCell>
+                  <TableCell>Occupation</TableCell>
+                  <TableCell>Claimed Wage/Day</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {isLoading ? (
-                  [...Array(4)].map((_, i) => <Skeleton key={i} />)
+                  [0, 1, 2, 3].map((row) => (
+                    <TableRow key={row}>
+                      {[0, 1, 2, 3, 4, 5].map((cell) => (
+                        <TableCell key={cell}>
+                          <Skeleton variant="text" width={cell === 0 ? 160 : 100} />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
                 ) : workers.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-12 text-center text-sm"
-                      style={{ color: "var(--text-muted)" }}
-                    >
-                      {search || filterState || filterOcc
+                  <TableRow>
+                    <TableCell colSpan={6} sx={{ py: 8, textAlign: "center", color: "text.secondary" }}>
+                      {search || filterState || filterOccupation
                         ? "No workers match your filters."
                         : 'No workers linked yet. Click "Link Worker" to get started.'}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : (
-                  workers.map((w, i) => (
-                    <tr
-                      key={w._id}
-                      onClick={() => navigate(`/workers/${w._id}`)}
-                      className="transition-colors duration-100 cursor-pointer"
-                      style={{
-                        borderBottom:
-                          i < workers.length - 1
-                            ? "1px solid var(--border)"
-                            : "none",
+                  workers.map((worker) => (
+                    <TableRow
+                      key={worker._id}
+                      hover
+                      onClick={() => navigate(`/workers/${worker._id}`)}
+                      sx={{
+                        cursor: "pointer",
+                        "& .MuiTableCell-root": {
+                          borderColor: alpha(theme.palette.common.white, 0.06),
+                        },
                       }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.background =
-                          "rgba(255,255,255,0.02)")
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.background = "transparent")
-                      }
                     >
-                      {/* Name */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-7 h-7 flex-shrink-0 flex items-center justify-center text-xs font-bold"
-                            style={{
-                              background: "var(--accent)",
-                              color: "#000",
-                              borderRadius: "var(--radius-sm)",
-                              fontFamily: "var(--font-display)",
+                      <TableCell>
+                        <Stack direction="row" spacing={1.5} alignItems="center">
+                          <Avatar
+                            sx={{
+                              width: 34,
+                              height: 34,
+                              bgcolor: "primary.main",
+                              color: "primary.contrastText",
+                              fontFamily: '"IBM Plex Mono", monospace',
                             }}
                           >
-                            {(w.name ?? "?")[0].toUpperCase()}
-                          </div>
-                          <div>
-                            <p
-                              className="font-medium"
-                              style={{
-                                color: "var(--text-primary)",
-                                fontFamily: "var(--font-display)",
+                            {(worker.name ?? "?").charAt(0).toUpperCase()}
+                          </Avatar>
+                          <Box>
+                            <Typography
+                              sx={{
+                                fontFamily: '"IBM Plex Mono", monospace',
+                                fontWeight: 700,
                               }}
                             >
-                              {w.name ?? "—"}
-                            </p>
-                            {!w.is_verified && (
-                              <span
-                                className="text-xs"
-                                style={{ color: "var(--text-muted)" }}
-                              >
+                              {worker.name ?? "—"}
+                            </Typography>
+                            {!worker.is_verified ? (
+                              <Typography variant="caption" color="text.secondary">
                                 Unverified
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Phone */}
-                      <td className="px-4 py-3">
-                        <span
-                          className="flex items-center gap-1.5 text-xs"
-                          style={{
-                            color: "var(--text-secondary)",
-                            fontFamily: "var(--font-display)",
+                              </Typography>
+                            ) : null}
+                          </Box>
+                        </Stack>
+                      </TableCell>
+                      <TableCell>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Phone size={14} color={theme.palette.text.secondary} />
+                          <Typography variant="body2" color="text.secondary">
+                            {worker.phone_number}
+                          </Typography>
+                        </Stack>
+                      </TableCell>
+                      <TableCell>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <MapPin size={14} color={theme.palette.text.secondary} />
+                          <Typography variant="body2" color="text.secondary">
+                            {worker.state ?? "—"}
+                          </Typography>
+                        </Stack>
+                      </TableCell>
+                      <TableCell>
+                        <OccupationBadge occupation={worker.occupation} />
+                      </TableCell>
+                      <TableCell>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: worker.claimed_daily_wage ? "text.primary" : "text.secondary",
+                            fontFamily: '"IBM Plex Mono", monospace',
                           }}
                         >
-                          <Phone
-                            size={10}
-                            style={{ color: "var(--text-muted)" }}
+                          {worker.claimed_daily_wage ? `₹${worker.claimed_daily_wage}/day` : "Not set"}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center">
+                          <UnlinkAction
+                            workerId={worker._id}
+                            workerName={worker.name ?? "Worker"}
+                            onStop={(event) => event.stopPropagation()}
                           />
-                          {w.phone_number}
-                        </span>
-                      </td>
-
-                      {/* State */}
-                      <td className="px-4 py-3">
-                        <span
-                          className="flex items-center gap-1.5 text-xs"
-                          style={{
-                            color: "var(--text-secondary)",
-                            fontFamily: "var(--font-display)",
-                          }}
-                        >
-                          <MapPin
-                            size={10}
-                            style={{ color: "var(--text-muted)" }}
-                          />
-                          {w.state ?? "—"}
-                        </span>
-                      </td>
-
-                      {/* Occupation */}
-                      <td className="px-4 py-3">
-                        <OccBadge occ={w.occupation} />
-                      </td>
-
-                      {/* Claimed daily wage */}
-                      <td
-                        className="px-4 py-3 text-xs"
-                        style={{
-                          color: w.claimed_daily_wage
-                            ? "var(--text-primary)"
-                            : "var(--text-muted)",
-                          fontFamily: "var(--font-display)",
-                        }}
-                      >
-                        {w.claimed_daily_wage
-                          ? `₹${w.claimed_daily_wage}/day`
-                          : "Not set"}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2 justify-end">
-                          <UnlinkButton
-                            workerId={w._id}
-                            workerName={w.name ?? "Worker"}
-                          />
-                          <ChevronRight
-                            size={14}
-                            style={{ color: "var(--text-muted)" }}
-                          />
-                        </div>
-                      </td>
-                    </tr>
+                          <ChevronRight size={16} color={theme.palette.text.secondary} />
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
                   ))
                 )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Stack>
+      </Box>
 
-      {showLinkModal && (
-        <LinkWorkerModal onClose={() => setShowLinkModal(false)} />
-      )}
+      <LinkWorkerDialog open={showLinkDialog} onClose={() => setShowLinkDialog(false)} />
     </Layout>
   );
 };
