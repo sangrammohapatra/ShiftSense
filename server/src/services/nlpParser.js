@@ -1,4 +1,4 @@
-/**
+﻿/**
  * services/nlpParser.js — Gemini AI shift message parser
  *
  * Calls Google Gemini API to extract structured shift data from the
@@ -99,8 +99,7 @@ const OCCUPATION_KEYWORDS = {
 };
 
 const TIME_RANGE_REGEX =
-  /(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:to|till|tak|se|-|–|—)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i;
-
+  /(\d{1,2})(?::(\d{2}))?\s*(am|pm|baje)?\s*(?:to|till|tak|se|-)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|baje)?/gi;
 const todayIST = () => {
   const now = new Date();
   const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
@@ -138,7 +137,7 @@ const parseDateFromText = (text) => {
   const iso = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
   if (iso) return parseIsoDate(iso[1], iso[2], iso[3]);
 
-  const dmy = text.match(/\b(\d{2})[\/.-](\d{2})[\/.-](\d{4})\b/);
+  const dmy = text.match(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})\b/);
   if (dmy) return parseIsoDate(dmy[3], dmy[2], dmy[1]);
 
   if (/\bkal\b/i.test(text)) return shiftDateByOffset(-1);
@@ -196,19 +195,23 @@ const parseHour = (hourText, meridiem) => {
 
 const quickParseShiftMessage = (rawText) => {
   const normalized = String(rawText || "")
-    .replace(/[–—]/g, "-")
+    .replace(/[\u2013\u2014]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
-
-  const match = normalized.match(TIME_RANGE_REGEX);
+  const matches = Array.from(normalized.matchAll(TIME_RANGE_REGEX));
+  const match = matches.find((candidate) => {
+    const matchedText = candidate[0] || "";
+    const hasExplicitTimeMarker =
+      Boolean(candidate[3]) ||
+      Boolean(candidate[6]) ||
+      /\b(?:am|pm|baje|to|till|tak|se)\b/i.test(matchedText);
+    return hasExplicitTimeMarker;
+  });
   if (!match) return null;
-
   const startHour = parseHour(match[1], match[3] || match[6] || null);
   let endHour = parseHour(match[4], match[6] || match[3] || null);
-
   if (startHour === null || endHour === null) return null;
   if (endHour < startHour) endHour += 24;
-
   return {
     shift_date: parseDateFromText(normalized) || todayIST(),
     start_hour: startHour,
