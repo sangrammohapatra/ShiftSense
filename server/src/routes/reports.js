@@ -129,8 +129,10 @@ router.post("/generate", async (req, res) => {
       },
     });
   } catch (err) {
-    // Bull throws if jobId already exists — treat as idempotent success
-    if (err.message?.includes("Job is already")) {
+    // Bull throws "Job already exists" when a duplicate jobId is added
+    // The exact message varies by Bull version — check for common variants
+    const isAlreadyQueued = err.message?.includes("already") || err.message?.includes("duplicate") || err.code === "ERR_JOB_EXISTS";
+    if (isAlreadyQueued) {
       return res.status(202).json({
         success: true,
         data: {

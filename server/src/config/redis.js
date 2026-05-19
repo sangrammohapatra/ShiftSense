@@ -70,3 +70,44 @@ export const bullClientFactory = (type) => {
     connectionName: `shiftsense-bull-${type}`,
   });
 };
+
+/**
+ * Bull.js createClient factory.
+ *
+ * Bull v4 internally creates THREE Redis connections and has strict rules
+ * about which ioredis options each type is allowed to have:
+ *
+ *   "client"              → maxRetriesPerRequest: null   (required)
+ *   "subscriber"          → must NOT have maxRetriesPerRequest or enableReadyCheck
+ *   "bclient" (blocking)  → must NOT have maxRetriesPerRequest or enableReadyCheck
+ *
+ * Passing a plain URL string to new Bull("queue", url) bypasses this entirely
+ * and uses Bull's own ioredis instance — which silently breaks subscriber and
+ * bclient connections, causing jobs to be enqueued but never processed (the
+ * symptom: /generate returns 202 but nothing appears in logs).
+ *
+ * Pass this as: new Bull("queue", { createClient: bullClientFactory })
+ *
+ * @param {"client"|"subscriber"|"bclient"} type
+ * @returns {Redis}
+ */
+export const bullClientFactory = (type) => {
+  const base = {
+    retryStrategy,
+    enableOfflineQueue: false,
+    connectionName: `shiftsense-bull-${type}`,
+  };
+
+  if (type === "client") {
+    // client connection: Bull needs maxRetriesPerRequest: null here
+    return new Redis(redisUrl, { ...base, maxRetriesPerRequest: null });
+  }
+
+  // subscriber and bclient: must NOT have maxRetriesPerRequest or enableReadyCheck
+  // (ioredis throws "Cannot use maxRetriesPerRequest in subscriber mode")
+  return new Redis(redisUrl, {
+    ...base,
+    enableReadyCheck: false,
+    // maxRetriesPerRequest intentionally omitted
+  });
+};

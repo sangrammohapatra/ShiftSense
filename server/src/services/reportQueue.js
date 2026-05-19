@@ -14,16 +14,24 @@ import nodemailer from "nodemailer";
 import { PassThrough } from "stream";
 
 import { Employer, EmployerWorker, ShiftLog } from "../models/index.js";
+import { bullClientFactory } from "../config/redis.js";
 
-// ─── Queue setup — pass URL string directly, let Bull manage connections ───────
-const REDIS_URL = process.env.REDIS_URL || "redis://127.0.0.1:6379";
-
-export const reportQueue = new Bull("monthlyReports", REDIS_URL, {
+// ─── Queue setup ──────────────────────────────────────────────────────────────
+// Use bullClientFactory so each of Bull's 3 internal Redis connections gets
+// the exact ioredis options it requires (client vs subscriber/bclient differ).
+// Do NOT pass a URL string here — it bypasses the factory and uses Bull's own
+// ioredis instance which ignores maxRetriesPerRequest: null on subscriber/bclient.
+export const reportQueue = new Bull("monthlyReports", {
+  createClient: bullClientFactory,
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: "exponential", delay: 60_000 },
     removeOnComplete: 50,
     removeOnFail: 20,
+    // ⚠️ Critical: PDF + S3 + email can take up to 2 minutes.
+    // Bull's default lock duration is 5 seconds — the job stalls and gets
+    // retried indefinitely without this. Set to 3 minutes with a 30s renewal.
+    timeout: 180_000,
   },
 });
 
@@ -325,91 +333,123 @@ const sendReportEmail = async (employer, month, s3Url, summary) => {
 };
 
 // ─── Queue processor ──────────────────────────────────────────────────────────
-reportQueue.process(async (job) => {
-  const { employerId } = job.data;
-  job.progress(5);
+// lockDuration: how long Bull holds the job lock before assuming the worker crashed.
+// stalledInterval: how often Bull checks for stalled jobs.
+// Both must exceed the longest possible job execution time (PDF + S3 + email).
+reportQueue.process(
+  1, // concurrency: process 1 job at a time (S3 + email are rate-sensitive)
+  async (job) => {
+    const { employerId } = job.data;
+    job.progress(5);
 
-  const employer = await Employer.findById(employerId).lean();
-  if (!employer) throw new Error(`Employer ${employerId} not found.`);
+    const employer = await Employer.findById(employerId).lean();
+    if (!employer) throw new Error(`Employer ${employerId} not found.`);
 
-  const links = await EmployerWorker.find({
-    employer_id: employerId,
-    is_active: true,
-  })
-    .select("worker_id")
-    .lean();
-  const workerIds = links.map((l) => l.worker_id);
-  job.progress(15);
+    const links = await EmployerWorker.find({
+      employer_id: employerId,
+      is_active: true,
+    })
+      .select("worker_id")
+      .lean();
+    const workerIds = links.map((l) => l.worker_id);
+    job.progress(15);
 
-  const { start, end } = lastMonthRange();
-  const monthKey = lastMonthKey();
-  const month = monthLabel(monthKey);
+    const { start, end } = lastMonthRange();
+    const monthKey = lastMonthKey();
+    const month = monthLabel(monthKey);
 
-  const allShifts = await ShiftLog.find({
-    worker_id: { $in: workerIds },
-    shift_date: { $gte: start, $lt: end },
-  })
-    .populate("worker_id", "name phone_number occupation")
-    .lean();
-  job.progress(35);
+    const allShifts = await ShiftLog.find({
+      worker_id: { $in: workerIds },
+      shift_date: { $gte: start, $lt: end },
+    })
+      .populate("worker_id", "name phone_number occupation")
+      .lean();
+    job.progress(35);
 
-  const workerMap = {};
-  for (const shift of allShifts) {
-    const wid = shift.worker_id?._id?.toString() ?? "unknown";
-    if (!workerMap[wid]) {
-      workerMap[wid] = {
-        name: shift.worker_id?.name ?? "Unknown",
-        phone: shift.worker_id?.phone_number ?? "—",
-        occupation: shift.worker_id?.occupation ?? "—",
-        shifts: 0,
-        grossOwed: 0,
-        claimed: 0,
-        totalShortfall: 0,
-        disputes: 0,
-      };
+    const workerMap = {};
+    for (const shift of allShifts) {
+      const wid = shift.worker_id?._id?.toString() ?? "unknown";
+      if (!workerMap[wid]) {
+        workerMap[wid] = {
+          name: shift.worker_id?.name ?? "Unknown",
+          phone: shift.worker_id?.phone_number ?? "—",
+          occupation: shift.worker_id?.occupation ?? "—",
+          shifts: 0,
+          grossOwed: 0,
+          claimed: 0,
+          totalShortfall: 0,
+          disputes: 0,
+        };
+      }
+      const w = workerMap[wid];
+      w.shifts++;
+      w.grossOwed += shift.gross_owed ?? 0;
+      w.claimed += shift.claimed_amount ?? 0;
+      w.totalShortfall += Math.max(0, shift.shortfall ?? 0);
+      if (shift.status === "disputed") w.disputes++;
     }
-    const w = workerMap[wid];
-    w.shifts++;
-    w.grossOwed += shift.gross_owed ?? 0;
-    w.claimed += shift.claimed_amount ?? 0;
-    w.totalShortfall += Math.max(0, shift.shortfall ?? 0);
-    if (shift.status === "disputed") w.disputes++;
-  }
 
-  const workers = Object.values(workerMap);
-  const summary = {
-    totalWorkers: workerIds.length,
-    totalShifts: allShifts.length,
-    totalGrossOwed: workers.reduce((s, w) => s + w.grossOwed, 0),
-    totalClaimed: workers.reduce((s, w) => s + w.claimed, 0),
-    totalShortfall: workers.reduce((s, w) => s + w.totalShortfall, 0),
-    totalDisputes: workers.reduce((s, w) => s + w.disputes, 0),
-  };
-  job.progress(50);
+    const workers = Object.values(workerMap);
+    const summary = {
+      totalWorkers: workerIds.length,
+      totalShifts: allShifts.length,
+      totalGrossOwed: workers.reduce((s, w) => s + w.grossOwed, 0),
+      totalClaimed: workers.reduce((s, w) => s + w.claimed, 0),
+      totalShortfall: workers.reduce((s, w) => s + w.totalShortfall, 0),
+      totalDisputes: workers.reduce((s, w) => s + w.disputes, 0),
+    };
+    job.progress(50);
 
-  const buffer = await buildReportPDF({
-    employer,
-    month,
-    monthKey,
-    workers,
-    summary,
-  });
-  job.progress(70);
+    const buffer = await buildReportPDF({
+      employer,
+      month,
+      monthKey,
+      workers,
+      summary,
+    });
+    job.progress(70);
 
-  const { url: s3Url } = await uploadReport(buffer, employerId, monthKey);
-  job.progress(85);
+    const { url: s3Url } = await uploadReport(buffer, employerId, monthKey);
+    job.progress(85);
 
-  await sendReportEmail(employer, month, s3Url, summary);
-  job.progress(100);
+    await sendReportEmail(employer, month, s3Url, summary);
+    job.progress(100);
 
-  return { employerId, monthKey, s3Url };
-});
+    return { employerId, monthKey, s3Url };
+  },
+);
 
 reportQueue.on("completed", (job, result) => {
   console.log(`[ReportQueue] ✅ Job ${job.id} complete — ${result.monthKey}`);
 });
+
 reportQueue.on("failed", (job, err) => {
-  console.error(`[ReportQueue] ❌ Job ${job.id} failed: ${err.message}`);
+  console.error(
+    `[ReportQueue] ❌ Job ${job.id} failed (attempt ${job.attemptsMade}/${job.opts.attempts}): ${err.message}`,
+  );
+  console.error(err.stack);
+});
+
+reportQueue.on("stalled", (job) => {
+  console.warn(
+    `[ReportQueue] ⚠️ Job ${job.id} stalled — processor took too long. Check timeout setting.`,
+  );
+});
+
+// This fires when Bull cannot connect to Redis at all — the most common
+// cause of "job enqueued but nothing happens" during local development.
+reportQueue.on("error", (err) => {
+  console.error(`[ReportQueue] Redis connection error: ${err.message}`);
+});
+
+reportQueue.on("active", (job) => {
+  console.log(
+    `[ReportQueue] 🔄 Job ${job.id} started processing for employer ${job.data.employerId}`,
+  );
+});
+
+reportQueue.on("progress", (job, progress) => {
+  console.log(`[ReportQueue] Job ${job.id} progress: ${progress}%`);
 });
 
 export const enqueueReport = async (employerId, opts = {}) => {
