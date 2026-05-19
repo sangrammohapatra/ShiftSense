@@ -1,17 +1,20 @@
 /**
  * config/redis.js — ioredis client + Bull connection factory
  *
- * Bull v4 validates the ioredis instance OPTIONS after construction via
- * queue.js:318. It checks the live options object on the instance, not just
- * what you passed — ioredis sets maxRetriesPerRequest = 0 as a default when
- * you omit it, and Bull rejects anything !== null for subscriber/bclient.
+ * Bull v4 + ioredis compatibility rules (confirmed against Bull source):
  *
- * The only values that satisfy Bull's check:
- *   client:              maxRetriesPerRequest: null,  enableReadyCheck: false
- *   subscriber/bclient:  maxRetriesPerRequest: null,  enableReadyCheck: false
+ *   ALL three connection types (client, subscriber, bclient) must have:
+ *     maxRetriesPerRequest: null   — ioredis default is 0; Bull rejects non-null
+ *     enableReadyCheck:     false  — ioredis default is true; Bull rejects true
  *
- * Yes — null on ALL three, and enableReadyCheck: false on ALL three.
- * This is counterintuitive but confirmed by Bull's source and issue #1873.
+ *   enableOfflineQueue MUST be true (the default) for Bull connections.
+ *   Bull issues CLIENT and other commands during worker startup before the
+ *   TCP connection is fully established. With enableOfflineQueue: false those
+ *   commands are immediately rejected with "Stream isn't writeable", crashing
+ *   the worker before it can process any jobs.
+ *
+ *   Only the shared app client (redisClient) uses enableOfflineQueue: false
+ *   because we want conversation-state reads to fail fast rather than queue.
  */
 
 import Redis from "ioredis";
@@ -31,6 +34,9 @@ const retryStrategy = (times) => {
 export const redisUrl = process.env.REDIS_URL || "redis://127.0.0.1:6379";
 
 // ── Shared app client (conversation state, caching) ───────────────────────────
+// enableOfflineQueue: false here is intentional — if Redis is down we want
+// WhatsApp webhook handlers to fail fast and return an error reply, not queue
+// commands indefinitely.
 export const redisClient = new Redis(redisUrl, {
   retryStrategy,
   enableOfflineQueue:   false,
@@ -48,15 +54,11 @@ redisClient.on("close",   () => console.warn("[Redis] Connection closed."));
 /**
  * Bull calls this with type = "client" | "subscriber" | "bclient".
  *
- * ALL THREE must have:
- *   maxRetriesPerRequest: null        (not 0, not undefined — exactly null)
- *   enableReadyCheck:     false       (ioredis default is true; Bull rejects it)
- *
- * Bull's validation at queue.js:318 reads opts directly off the ioredis
- * instance after construction. If maxRetriesPerRequest is not null (including
- * the ioredis default of 0) or enableReadyCheck is not false, it throws:
- *   "Using a redis instance with enableReadyCheck or maxRetriesPerRequest
- *    for bclient/subscriber is not permitted."
+ * Required for all three types:
+ *   maxRetriesPerRequest: null   (Bull rejects the ioredis default of 0)
+ *   enableReadyCheck:     false  (Bull rejects the ioredis default of true)
+ *   enableOfflineQueue:   true   (Bull default — MUST NOT be false; Bull sends
+ *                                 commands before the connection is ready)
  *
  * @param {"client"|"subscriber"|"bclient"} type
  * @returns {import("ioredis").Redis}
@@ -64,8 +66,8 @@ redisClient.on("close",   () => console.warn("[Redis] Connection closed."));
 export const bullClientFactory = (type) =>
   new Redis(redisUrl, {
     retryStrategy,
-    enableOfflineQueue:   false,
-    enableReadyCheck:     false,   // MUST be false for all three types
-    maxRetriesPerRequest: null,    // MUST be null (not 0) for all three types
+    enableReadyCheck:     false,
+    maxRetriesPerRequest: null,
+    // enableOfflineQueue intentionally omitted — defaults to true, which Bull needs
     connectionName:       `shiftsense-bull-${type}`,
   });
