@@ -412,10 +412,25 @@ reportQueue.process(
     const { url: s3Url } = await uploadReport(buffer, employerId, monthKey);
     job.progress(85);
 
-    await sendReportEmail(employer, month, s3Url, summary);
+    // Email is best-effort — a misconfigured SMTP must not fail the whole job.
+    // The PDF is already on S3 and downloadable from the dashboard.
+    try {
+      await sendReportEmail(employer, month, s3Url, summary);
+      console.log(`[ReportQueue] Email sent to ${employer.email}`);
+    } catch (emailErr) {
+      console.warn(
+        `[ReportQueue] ⚠️  Email failed (PDF still available on S3): ${emailErr.message}\n` +
+          `  Check SMTP_HOST, SMTP_USER, SMTP_PASS in your .env.\n` +
+          `  SMTP_HOST: ${process.env.SMTP_HOST}\n` +
+          `  SMTP_PORT: ${process.env.SMTP_PORT}\n` +
+          `  SMTP_SECURE: ${process.env.SMTP_SECURE === "true"}\n` +
+          `  SMTP_USER: ${process.env.SMTP_USER}\n` +
+          `  SMTP_PASS: ${process.env.SMTP_PASS}`,
+      );
+    }
     job.progress(100);
 
-    return { employerId, monthKey, s3Url };
+    return { employerId, monthKey, s3Url, emailSent: true };
   },
 );
 
