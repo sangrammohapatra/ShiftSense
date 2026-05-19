@@ -50,26 +50,26 @@ redisClient.on("close",   () => console.warn("[Redis] Connection closed."));
  * @param {"client"|"subscriber"|"bclient"} type
  * @returns {Redis}
  */
-export const bullClientFactory = (type) => {
-  if (type === "client") {
-    // Regular command client — needs maxRetriesPerRequest: null for Bull
-    return new Redis(redisUrl, {
-      retryStrategy,
-      enableOfflineQueue: false,
-      maxRetriesPerRequest: null,
-      connectionName: "shiftsense-bull-client",
-    });
-  }
+// export const bullClientFactory = (type) => {
+//   if (type === "client") {
+//     // Regular command client — needs maxRetriesPerRequest: null for Bull
+//     return new Redis(redisUrl, {
+//       retryStrategy,
+//       enableOfflineQueue: false,
+//       maxRetriesPerRequest: null,
+//       connectionName: "shiftsense-bull-client",
+//     });
+//   }
 
-  // subscriber and bclient — must have NO enableReadyCheck or maxRetriesPerRequest
-  // ioredis sets enableReadyCheck: true by default, so we must explicitly set false
-  return new Redis(redisUrl, {
-    retryStrategy,
-    enableOfflineQueue: false,
-    enableReadyCheck: false,
-    connectionName: `shiftsense-bull-${type}`,
-  });
-};
+//   // subscriber and bclient — must have NO enableReadyCheck or maxRetriesPerRequest
+//   // ioredis sets enableReadyCheck: true by default, so we must explicitly set false
+//   return new Redis(redisUrl, {
+//     retryStrategy,
+//     enableOfflineQueue: false,
+//     enableReadyCheck: false,
+//     connectionName: `shiftsense-bull-${type}`,
+//   });
+// };
 
 /**
  * Bull.js createClient factory.
